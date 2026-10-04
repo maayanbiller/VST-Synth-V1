@@ -1,0 +1,37 @@
+# Build directories
+build/
+Builds/
+
+# IDE files
+*.user
+*.suo
+*.ipch
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+.vs/
+
+# Generated JUCE files
+JuceLibraryCode/
+
+# Scratch & Archives
+scratch/
+automation_archive/
+.agents/
+
+# Python virtual environments & caches
+__pycache__/
+*.pyc
+
+# VST/Audio Plugin outputs
+*.vst3
+*.exe
+*.dll
+*.so
+*.component
+*.aaxplugin
+
+# OS generated files
+.DS_Store
+Thumbs.db
