@@ -3,226 +3,283 @@
 VSTSynthV1AudioProcessorEditor::VSTSynthV1AudioProcessorEditor (VSTSynthV1AudioProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
-    setSize (1000, 600);
+    juce::LookAndFeel::setDefaultLookAndFeel(&customLookAndFeel);
+    setLookAndFeel(&customLookAndFeel);
+    
+    auto setupLabeled = [this](LabeledSlider& ls, const juce::String& paramID, std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& attach)
+    {
+        addAndMakeVisible(ls);
+        if (paramID.isNotEmpty()) {
+            attach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(audioProcessor.apvts, paramID, ls.slider);
+            ls.slider.textFromValueFunction = [](double v) { 
+                if (v >= 10.0 || std::abs(v - std::round(v)) < 0.001) return juce::String((int)std::round(v)); 
+                return juce::String(v, 2); 
+            };
+        }
+    };
 
-    addAndMakeVisible(osc1Group);
-    addAndMakeVisible(osc2Group);
-    addAndMakeVisible(filterGroup);
-    addAndMakeVisible(envGroup);
-    addAndMakeVisible(lfoGroup);
+    addAndMakeVisible(osc1Group); addAndMakeVisible(osc2Group); addAndMakeVisible(osc3Group); addAndMakeVisible(osc4Group);
+    addAndMakeVisible(mixerGroup); addAndMakeVisible(filterGroup); addAndMakeVisible(envGroup); addAndMakeVisible(lfoGroup);
 
-    addAndMakeVisible(osc1WaveCombo);
-    osc1WaveComboAtt = std::make_unique<ComboBoxAttachment>(audioProcessor.apvts, IDs::OSC1_WAVE, osc1WaveCombo);
+    setupLabeled(osc1WaveSlider, IDs::OSC1_WAVE, osc1WaveAttach);
+    setupLabeled(osc1OctSlider, IDs::OSC1_OCTAVE, osc1OctAttach);
+    setupLabeled(osc1DetuneSlider, IDs::OSC1_DETUNE, osc1DetuneAttach);
+    setupLabeled(osc1PwmSlider, IDs::OSC1_PWM, osc1PwmAttach);
+    setupLabeled(osc1VoicesSlider, IDs::OSC1_VOICES, osc1VoicesAttach);
+    setupLabeled(osc1WidthSlider, IDs::OSC1_WIDTH, osc1WidthAttach);
 
-    osc1SemiSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    osc1SemiSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(osc1SemiSlider);
-    osc1SemiSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::OSC1_SEMI, osc1SemiSlider);
+    setupLabeled(osc2WaveSlider, IDs::OSC2_WAVE, osc2WaveAttach);
+    setupLabeled(osc2OctSlider, IDs::OSC2_OCTAVE, osc2OctAttach);
+    setupLabeled(osc2DetuneSlider, IDs::OSC2_DETUNE, osc2DetuneAttach);
+    setupLabeled(osc2PwmSlider, IDs::OSC2_PWM, osc2PwmAttach);
+    setupLabeled(osc2VoicesSlider, IDs::OSC2_VOICES, osc2VoicesAttach);
+    setupLabeled(osc2WidthSlider, IDs::OSC2_WIDTH, osc2WidthAttach);
 
-    osc1DetuneSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    osc1DetuneSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(osc1DetuneSlider);
-    osc1DetuneSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::OSC1_DETUNE, osc1DetuneSlider);
+    setupLabeled(osc3WaveSlider, IDs::OSC3_WAVE, osc3WaveAttach);
+    setupLabeled(osc3OctSlider, IDs::OSC3_OCTAVE, osc3OctAttach);
+    setupLabeled(osc3DetuneSlider, IDs::OSC3_DETUNE, osc3DetuneAttach);
+    setupLabeled(osc3PwmSlider, IDs::OSC3_PWM, osc3PwmAttach);
+    setupLabeled(osc3VoicesSlider, IDs::OSC3_VOICES, osc3VoicesAttach);
+    setupLabeled(osc3WidthSlider, IDs::OSC3_WIDTH, osc3WidthAttach);
 
-    osc1LevelSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    osc1LevelSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(osc1LevelSlider);
-    osc1LevelSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::OSC1_LEVEL, osc1LevelSlider);
+    setupLabeled(osc4WaveSlider, IDs::OSC4_WAVE, osc4WaveAttach);
+    setupLabeled(osc4OctSlider, IDs::OSC4_OCTAVE, osc4OctAttach);
+    setupLabeled(osc4DetuneSlider, IDs::OSC4_DETUNE, osc4DetuneAttach);
+    setupLabeled(osc4PwmSlider, IDs::OSC4_PWM, osc4PwmAttach);
+    setupLabeled(osc4VoicesSlider, IDs::OSC4_VOICES, osc4VoicesAttach);
+    setupLabeled(osc4WidthSlider, IDs::OSC4_WIDTH, osc4WidthAttach);
 
-    osc1PwmSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    osc1PwmSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(osc1PwmSlider);
-    osc1PwmSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::OSC1_PWM, osc1PwmSlider);
+    setupLabeled(osc1LevelSlider, IDs::OSC1_LEVEL, osc1LevelAttach);
+    setupLabeled(osc2LevelSlider, IDs::OSC2_LEVEL, osc2LevelAttach);
+    setupLabeled(osc3LevelSlider, IDs::OSC3_LEVEL, osc3LevelAttach);
+    setupLabeled(osc4LevelSlider, IDs::OSC4_LEVEL, osc4LevelAttach);
+    setupLabeled(masterVolSlider, IDs::MASTER_VOL, masterVolAttach);
 
-    addAndMakeVisible(osc2WaveCombo);
-    osc2WaveComboAtt = std::make_unique<ComboBoxAttachment>(audioProcessor.apvts, IDs::OSC2_WAVE, osc2WaveCombo);
+    setupLabeled(filterCutoffSlider, IDs::FILTER_CUTOFF, filterCutoffAttach);
+    setupLabeled(filterResSlider, IDs::FILTER_RES, filterResAttach);
+    setupLabeled(filterDriveSlider, IDs::FILTER_DRIVE, filterDriveAttach);
+    setupLabeled(filterEnvAmtSlider, IDs::FILTER_ENV_AMT, filterEnvAmtAttach);
 
-    osc2SemiSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    osc2SemiSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(osc2SemiSlider);
-    osc2SemiSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::OSC2_SEMI, osc2SemiSlider);
+    setupLabeled(ampAttackSlider, IDs::AMP_ATTACK, ampAttackAttach);
+    setupLabeled(ampDecaySlider, IDs::AMP_DECAY, ampDecayAttach);
+    setupLabeled(ampSustainSlider, IDs::AMP_SUSTAIN, ampSustainAttach);
+    setupLabeled(ampReleaseSlider, IDs::AMP_RELEASE, ampReleaseAttach);
 
-    osc2DetuneSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    osc2DetuneSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(osc2DetuneSlider);
-    osc2DetuneSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::OSC2_DETUNE, osc2DetuneSlider);
+    setupLabeled(filtAttackSlider, IDs::FILT_ATTACK, filtAttackAttach);
+    setupLabeled(filtDecaySlider, IDs::FILT_DECAY, filtDecayAttach);
+    setupLabeled(filtSustainSlider, IDs::FILT_SUSTAIN, filtSustainAttach);
+    setupLabeled(filtReleaseSlider, IDs::FILT_RELEASE, filtReleaseAttach);
 
-    osc2LevelSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    osc2LevelSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(osc2LevelSlider);
-    osc2LevelSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::OSC2_LEVEL, osc2LevelSlider);
+    setupLabeled(modAttackSlider, IDs::MOD_ATTACK, modAttackAttach);
+    setupLabeled(modDecaySlider, IDs::MOD_DECAY, modDecayAttach);
+    setupLabeled(modSustainSlider, IDs::MOD_SUSTAIN, modSustainAttach);
+    setupLabeled(modReleaseSlider, IDs::MOD_RELEASE, modReleaseAttach);
+    
+    addAndMakeVisible(ampLabel); ampLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(filtLabel); filtLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(modLabel); modLabel.setJustificationType(juce::Justification::centred);
 
-    osc2PwmSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    osc2PwmSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(osc2PwmSlider);
-    osc2PwmSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::OSC2_PWM, osc2PwmSlider);
+    setupLabeled(lfo1WaveSlider, IDs::LFO1_WAVE, lfo1WaveAttach);
+    setupLabeled(lfo1RateSlider, IDs::LFO1_RATE, lfo1RateAttach);
+    setupLabeled(lfo1DepthSlider, IDs::LFO1_DEPTH, lfo1DepthAttach);
 
-    addAndMakeVisible(subWaveCombo);
-    subWaveComboAtt = std::make_unique<ComboBoxAttachment>(audioProcessor.apvts, IDs::SUB_WAVE, subWaveCombo);
+    setupLabeled(lfo2WaveSlider, IDs::LFO2_WAVE, lfo2WaveAttach);
+    setupLabeled(lfo2RateSlider, IDs::LFO2_RATE, lfo2RateAttach);
+    setupLabeled(lfo2DepthSlider, IDs::LFO2_DEPTH, lfo2DepthAttach);
+    
+    // Waveform labels are suppressed since we draw icons around them
+    osc1WaveSlider.showTextBox = false; osc1WaveSlider.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    osc2WaveSlider.showTextBox = false; osc2WaveSlider.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    osc3WaveSlider.showTextBox = false; osc3WaveSlider.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    osc4WaveSlider.showTextBox = false; osc4WaveSlider.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    lfo1WaveSlider.showTextBox = false; lfo1WaveSlider.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    lfo2WaveSlider.showTextBox = false; lfo2WaveSlider.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
 
-    subOctSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    subOctSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(subOctSlider);
-    subOctSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::SUB_OCT, subOctSlider);
+    osc1WaveSlider.label.setText("", juce::dontSendNotification);
+    osc2WaveSlider.label.setText("", juce::dontSendNotification);
+    osc3WaveSlider.label.setText("", juce::dontSendNotification);
+    osc4WaveSlider.label.setText("", juce::dontSendNotification);
+    lfo1WaveSlider.label.setText("", juce::dontSendNotification);
+    lfo2WaveSlider.label.setText("", juce::dontSendNotification);
 
-    subLevelSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    subLevelSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(subLevelSlider);
-    subLevelSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::SUB_LEVEL, subLevelSlider);
+    setupLabeled(playModeSlider, IDs::PLAY_MODE, playModeAttach);
+    playModeSlider.slider.textFromValueFunction = [](double v) {
+        int idx = (int)std::round(v);
+        if (idx == 0) return juce::String("Poly");
+        if (idx == 1) return juce::String("Mono");
+        if (idx == 2) return juce::String("Legato");
+        return juce::String("Poly");
+    };
+    playModeSlider.slider.valueFromTextFunction = [](const juce::String& t) {
+        if (t.equalsIgnoreCase("Mono")) return 1.0;
+        if (t.equalsIgnoreCase("Legato")) return 2.0;
+        return 0.0;
+    };
+    playModeSlider.slider.setRange(0.0, 2.0, 1.0);
 
-    noiseLevelSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    noiseLevelSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(noiseLevelSlider);
-    noiseLevelSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::NOISE_LEVEL, noiseLevelSlider);
+    setupLabeled(glideSlider, IDs::GLIDE_TIME, glideAttach);
+    glideSlider.slider.textFromValueFunction = [](double v) {
+        return juce::String(v, 2) + " s";
+    };
+    
+    setupLabeled(noiseLevelSlider, IDs::NOISE_LEVEL, noiseLevelAttach);
+    setupLabeled(noiseColorSlider, IDs::NOISE_COLOR, noiseColorAttach);
 
-    addAndMakeVisible(filterTypeCombo);
-    filterTypeComboAtt = std::make_unique<ComboBoxAttachment>(audioProcessor.apvts, IDs::FILTER_TYPE, filterTypeCombo);
+    addAndMakeVisible(modGroup); addAndMakeVisible(playGroup); addAndMakeVisible(noiseGroup);
+    playGroup.setLookAndFeel(&customLookAndFeel);
+    noiseGroup.setLookAndFeel(&customLookAndFeel);
+    modGroup.setLookAndFeel(&customLookAndFeel);
+    
+    vintageModMatrix = std::make_unique<VintageModMatrixComponent>(audioProcessor.apvts, customLookAndFeel);
+    addAndMakeVisible(*vintageModMatrix);
 
-    filterCutoffSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    filterCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(filterCutoffSlider);
-    filterCutoffSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::FILTER_CUTOFF, filterCutoffSlider);
-
-    filterResSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    filterResSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(filterResSlider);
-    filterResSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::FILTER_RES, filterResSlider);
-
-    filterDriveSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    filterDriveSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(filterDriveSlider);
-    filterDriveSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::FILTER_DRIVE, filterDriveSlider);
-
-    filterEnvAmtSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    filterEnvAmtSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(filterEnvAmtSlider);
-    filterEnvAmtSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::FILTER_ENV_AMT, filterEnvAmtSlider);
-
-    ampAttackSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    ampAttackSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(ampAttackSlider);
-    ampAttackSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::AMP_ATTACK, ampAttackSlider);
-
-    ampDecaySlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    ampDecaySlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(ampDecaySlider);
-    ampDecaySliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::AMP_DECAY, ampDecaySlider);
-
-    ampSustainSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    ampSustainSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(ampSustainSlider);
-    ampSustainSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::AMP_SUSTAIN, ampSustainSlider);
-
-    ampReleaseSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    ampReleaseSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(ampReleaseSlider);
-    ampReleaseSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::AMP_RELEASE, ampReleaseSlider);
-
-    filtAttackSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    filtAttackSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(filtAttackSlider);
-    filtAttackSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::FILT_ATTACK, filtAttackSlider);
-
-    filtDecaySlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    filtDecaySlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(filtDecaySlider);
-    filtDecaySliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::FILT_DECAY, filtDecaySlider);
-
-    filtSustainSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    filtSustainSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(filtSustainSlider);
-    filtSustainSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::FILT_SUSTAIN, filtSustainSlider);
-
-    filtReleaseSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    filtReleaseSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(filtReleaseSlider);
-    filtReleaseSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::FILT_RELEASE, filtReleaseSlider);
-
-    addAndMakeVisible(lfo1WaveCombo);
-    lfo1WaveComboAtt = std::make_unique<ComboBoxAttachment>(audioProcessor.apvts, IDs::LFO1_WAVE, lfo1WaveCombo);
-
-    lfo1RateSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    lfo1RateSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(lfo1RateSlider);
-    lfo1RateSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::LFO1_RATE, lfo1RateSlider);
-
-    lfo1DepthSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    lfo1DepthSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(lfo1DepthSlider);
-    lfo1DepthSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::LFO1_DEPTH, lfo1DepthSlider);
-
-    masterVolSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    masterVolSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    addAndMakeVisible(masterVolSlider);
-    masterVolSliderAtt = std::make_unique<SliderAttachment>(audioProcessor.apvts, IDs::MASTER_VOL, masterVolSlider);
-
+    setSize (1200, 800);
+    sendLookAndFeelChange();
 }
 
 VSTSynthV1AudioProcessorEditor::~VSTSynthV1AudioProcessorEditor()
 {
+    juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
 }
 
 void VSTSynthV1AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour(30, 30, 30));
-    g.setColour (juce::Colours::white);
-    
-    // Draw some basic labels manually
-    g.drawText("Master Vol", masterVolSlider.getBounds().translated(0, -20), juce::Justification::centred);
+    customLookAndFeel.drawWoodBackground(g, getWidth(), getHeight());
 }
 
 void VSTSynthV1AudioProcessorEditor::resized()
 {
-    auto bounds = getLocalBounds().reduced(10);
+    auto area = getLocalBounds().reduced(15);
     
-    auto topRow = bounds.removeFromTop(200);
-    osc1Group.setBounds(topRow.removeFromLeft(200));
-    osc2Group.setBounds(topRow.removeFromLeft(200));
-    
-    // Quick and dirty layout just to expose all params
-    int x = 20;
-    int y = 30;
-    
-    osc1WaveCombo.setBounds(x, y, 80, 20); y+=30;
-    osc1SemiSlider.setBounds(x, y, 40, 40); x+=50;
-    osc1DetuneSlider.setBounds(x, y, 40, 40); x+=50;
-    osc1LevelSlider.setBounds(x, y, 40, 40); x+=50;
-    
-    x = 220; y = 30;
-    osc2WaveCombo.setBounds(x, y, 80, 20); y+=30;
-    osc2SemiSlider.setBounds(x, y, 40, 40); x+=50;
-    osc2DetuneSlider.setBounds(x, y, 40, 40); x+=50;
-    osc2LevelSlider.setBounds(x, y, 40, 40); x+=50;
-    
-    auto midRow = bounds.removeFromTop(150);
-    filterGroup.setBounds(midRow.removeFromLeft(300));
-    lfoGroup.setBounds(midRow.removeFromLeft(300));
-    
-    x = 20; y = 220;
-    filterTypeCombo.setBounds(x, y, 80, 20); y+=30;
-    filterCutoffSlider.setBounds(x, y, 50, 50); x+=60;
-    filterResSlider.setBounds(x, y, 50, 50); x+=60;
-    filterDriveSlider.setBounds(x, y, 50, 50); x+=60;
-    filterEnvAmtSlider.setBounds(x, y, 50, 50); x+=60;
+    auto topArea = area.removeFromTop(300);
+    int colWidth = topArea.getWidth() / 5;
 
-    x = 320; y = 220;
-    lfo1WaveCombo.setBounds(x, y, 80, 20); y+=30;
-    lfo1RateSlider.setBounds(x, y, 40, 40); x+=50;
-    lfo1DepthSlider.setBounds(x, y, 40, 40); x+=50;
+    auto osc1Area = topArea.removeFromLeft(colWidth).reduced(5);
+    auto osc2Area = topArea.removeFromLeft(colWidth).reduced(5);
+    auto osc3Area = topArea.removeFromLeft(colWidth).reduced(5);
+    auto osc4Area = topArea.removeFromLeft(colWidth).reduced(5);
+    auto mixArea = topArea.reduced(5);
 
-    auto botRow = bounds.removeFromTop(150);
-    envGroup.setBounds(botRow.removeFromLeft(400));
+    osc1Group.setBounds(osc1Area);
+    osc2Group.setBounds(osc2Area);
+    osc3Group.setBounds(osc3Area);
+    osc4Group.setBounds(osc4Area);
+    mixerGroup.setBounds(mixArea);
+
+    auto layoutOsc = [](juce::Rectangle<int> b, LabeledSlider& w, LabeledSlider& o, LabeledSlider& d, LabeledSlider& p, LabeledSlider& v, LabeledSlider& wd) {
+        b.removeFromTop(20); // title
+        auto topRow = b.removeFromTop(115);
+        w.setBounds(topRow.reduced(4));
+        auto midRow = b.removeFromTop(75);
+        int mw = midRow.getWidth() / 3;
+        o.setBounds(midRow.removeFromLeft(mw).reduced(2));
+        d.setBounds(midRow.removeFromLeft(mw).reduced(2));
+        p.setBounds(midRow.reduced(2));
+        auto botRow = b;
+        int bw = botRow.getWidth() / 2;
+        v.setBounds(botRow.removeFromLeft(bw).reduced(2));
+        wd.setBounds(botRow.reduced(2));
+    };
+
+    layoutOsc(osc1Area, osc1WaveSlider, osc1OctSlider, osc1DetuneSlider, osc1PwmSlider, osc1VoicesSlider, osc1WidthSlider);
+    layoutOsc(osc2Area, osc2WaveSlider, osc2OctSlider, osc2DetuneSlider, osc2PwmSlider, osc2VoicesSlider, osc2WidthSlider);
+    layoutOsc(osc3Area, osc3WaveSlider, osc3OctSlider, osc3DetuneSlider, osc3PwmSlider, osc3VoicesSlider, osc3WidthSlider);
+    layoutOsc(osc4Area, osc4WaveSlider, osc4OctSlider, osc4DetuneSlider, osc4PwmSlider, osc4VoicesSlider, osc4WidthSlider);
+
+    mixArea.removeFromTop(20);
+    int mixW = mixArea.getWidth() / 5;
+    osc1LevelSlider.setBounds(mixArea.removeFromLeft(mixW).reduced(2));
+    osc2LevelSlider.setBounds(mixArea.removeFromLeft(mixW).reduced(2));
+    osc3LevelSlider.setBounds(mixArea.removeFromLeft(mixW).reduced(2));
+    osc4LevelSlider.setBounds(mixArea.removeFromLeft(mixW).reduced(2));
+    masterVolSlider.setBounds(mixArea.reduced(2));
+
+    area.removeFromTop(10); // Spacing between top and bottom half
+
+    auto middleRow = area.removeFromTop(230);
+    auto bottomRow = area.removeFromTop(230);
+
+    filterGroup.setBounds(middleRow.removeFromLeft(250).reduced(5));
+    lfoGroup.setBounds(middleRow.removeFromRight(250).reduced(5));
+    envGroup.setBounds(middleRow.reduced(5));
+
+    playGroup.setBounds(bottomRow.removeFromLeft(220).reduced(5));
+    noiseGroup.setBounds(bottomRow.removeFromLeft(180).reduced(5));
+    modGroup.setBounds(bottomRow.reduced(5));
+
+    auto filtArea = filterGroup.getBounds().reduced(5);
+    filtArea.removeFromTop(20);
+    auto filtTop = filtArea.removeFromTop(filtArea.getHeight()/2);
+    filterCutoffSlider.setBounds(filtTop.removeFromLeft(filtTop.getWidth()/2).reduced(2));
+    filterResSlider.setBounds(filtTop.reduced(2));
+    auto filtBot = filtArea;
+    filterDriveSlider.setBounds(filtBot.removeFromLeft(filtBot.getWidth()/2).reduced(2));
+    filterEnvAmtSlider.setBounds(filtBot.reduced(2));
+
+    auto lfoA = lfoGroup.getBounds().reduced(5);
+    lfoA.removeFromTop(20);
+    auto lfo1A = lfoA.removeFromTop(lfoA.getHeight()/2);
+    int lW = lfo1A.getWidth() / 3;
+    lfo1WaveSlider.setBounds(lfo1A.removeFromLeft(lW).reduced(2));
+    lfo1RateSlider.setBounds(lfo1A.removeFromLeft(lW).reduced(2));
+    lfo1DepthSlider.setBounds(lfo1A.reduced(2));
+
+    auto lfo2A = lfoA;
+    lfo2WaveSlider.setBounds(lfo2A.removeFromLeft(lW).reduced(2));
+    lfo2RateSlider.setBounds(lfo2A.removeFromLeft(lW).reduced(2));
+    lfo2DepthSlider.setBounds(lfo2A.reduced(2));
     
-    x = 20; y = 380;
-    ampAttackSlider.setBounds(x, y, 40, 40); x+=50;
-    ampDecaySlider.setBounds(x, y, 40, 40); x+=50;
-    ampSustainSlider.setBounds(x, y, 40, 40); x+=50;
-    ampReleaseSlider.setBounds(x, y, 40, 40); x+=50;
+    // Layout Play
+    auto pArea = playGroup.getBounds().reduced(5);
+    pArea.removeFromTop(20);
+    {
+        pArea.removeFromTop(30);
+        int pw = pArea.getWidth() / 2;
+        playModeSlider.setBounds(pArea.removeFromLeft(pw).reduced(4));
+        glideSlider.setBounds(pArea.reduced(4));
+    }
 
-    filtAttackSlider.setBounds(x, y, 40, 40); x+=50;
-    filtDecaySlider.setBounds(x, y, 40, 40); x+=50;
-    filtSustainSlider.setBounds(x, y, 40, 40); x+=50;
-    filtReleaseSlider.setBounds(x, y, 40, 40); x+=50;
+    // Layout Noise
+    auto nArea = noiseGroup.getBounds().reduced(5);
+    nArea.removeFromTop(20);
+    noiseLevelSlider.setBounds(nArea.removeFromTop(nArea.getHeight()/2).reduced(2));
+    noiseColorSlider.setBounds(nArea.reduced(2));
 
-    masterVolSlider.setBounds(850, 500, 80, 80);
+    // Layout Mod Matrix
+    auto mArea = modGroup.getBounds().reduced(5);
+    mArea.removeFromTop(20);
+    if (vintageModMatrix)
+        vintageModMatrix->setBounds(mArea);
+
+    auto envA = envGroup.getBounds().reduced(5);
+    envA.removeFromTop(15);
+    
+    // Add spaces between envelope groups! (Requirement 4)
+    int groupWidth = envA.getWidth() / 3;
+    
+    auto modA = envA.removeFromLeft(groupWidth).reduced(8, 0);
+    modLabel.setBounds(modA.removeFromTop(20));
+    int mw = modA.getWidth() / 4;
+    modAttackSlider.setBounds(modA.removeFromLeft(mw));
+    modDecaySlider.setBounds(modA.removeFromLeft(mw));
+    modSustainSlider.setBounds(modA.removeFromLeft(mw));
+    modReleaseSlider.setBounds(modA);
+
+    auto filtEA = envA.removeFromLeft(groupWidth).reduced(8, 0);
+    filtLabel.setBounds(filtEA.removeFromTop(20));
+    int fw = filtEA.getWidth() / 4;
+    filtAttackSlider.setBounds(filtEA.removeFromLeft(fw));
+    filtDecaySlider.setBounds(filtEA.removeFromLeft(fw));
+    filtSustainSlider.setBounds(filtEA.removeFromLeft(fw));
+    filtReleaseSlider.setBounds(filtEA);
+
+    auto ampA = envA.reduced(8, 0);
+    ampLabel.setBounds(ampA.removeFromTop(20));
+    int aw = ampA.getWidth() / 4;
+    ampAttackSlider.setBounds(ampA.removeFromLeft(aw));
+    ampDecaySlider.setBounds(ampA.removeFromLeft(aw));
+    ampSustainSlider.setBounds(ampA.removeFromLeft(aw));
+    ampReleaseSlider.setBounds(ampA);
 }
+
+

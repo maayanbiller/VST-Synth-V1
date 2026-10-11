@@ -7,16 +7,160 @@ bool SynthVoice::canPlaySound (juce::SynthesiserSound* sound)
     return dynamic_cast<SynthSound*>(sound) != nullptr;
 }
 
+void SynthVoice::prepareToPlay (double sampleRate, int samplesPerBlock, int outputChannels)
+{
+    currentSampleRate = sampleRate;
+    isPrepared = true;
+
+    voiceBuffer.setSize(std::max(2, outputChannels), std::max(32, samplesPerBlock));
+
+    osc1.prepare(sampleRate);
+    osc2.prepare(sampleRate);
+    osc3.prepare(sampleRate);
+    osc4.prepare(sampleRate);
+
+    juce::dsp::ProcessSpec spec;
+    spec.maximumBlockSize = samplesPerBlock;
+    spec.sampleRate = sampleRate;
+    spec.numChannels = outputChannels;
+    filter.prepare(spec);
+
+    ampEnv.setSampleRate(sampleRate); filterEnv.setSampleRate(sampleRate); modEnv.setSampleRate(sampleRate);
+    lfo1.prepare(sampleRate); lfo2.prepare(sampleRate);
+
+    currentVelocity.reset(sampleRate, 0.01);
+    currentPitchBend.reset(sampleRate, 0.01);
+    
+    baseO1Level.reset(sampleRate, 0.01); baseO2Level.reset(sampleRate, 0.01); baseO3Level.reset(sampleRate, 0.01); baseO4Level.reset(sampleRate, 0.01);
+    baseO1Pwm.reset(sampleRate, 0.01); baseO2Pwm.reset(sampleRate, 0.01); baseO3Pwm.reset(sampleRate, 0.01); baseO4Pwm.reset(sampleRate, 0.01);
+    
+    baseFCutoff.reset(sampleRate, 0.01);
+    baseFRes.reset(sampleRate, 0.01);
+    baseFDrive.reset(sampleRate, 0.01);
+
+    currentMidiPitch.reset(sampleRate, 0.0);
+    currentMidiPitch.setCurrentAndTargetValue(60.0f);
+    lastMidiNote = -1.0f;
+}
+
+void SynthVoice::updateBaseParameters(const GlobalSynthParams& p)
+{
+    currentParams = p;
+    
+    baseO1Octave = p.oscOct[0]; baseO1Detune = p.oscDetune[0]; osc1.setWaveform(static_cast<PolyBLEPOscillator::Waveform>(p.oscWave[0]));
+    baseO2Octave = p.oscOct[1]; baseO2Detune = p.oscDetune[1]; osc2.setWaveform(static_cast<PolyBLEPOscillator::Waveform>(p.oscWave[1]));
+    baseO3Octave = p.oscOct[2]; baseO3Detune = p.oscDetune[2]; osc3.setWaveform(static_cast<PolyBLEPOscillator::Waveform>(p.oscWave[2]));
+    baseO4Octave = p.oscOct[3]; baseO4Detune = p.oscDetune[3]; osc4.setWaveform(static_cast<PolyBLEPOscillator::Waveform>(p.oscWave[3]));
+    
+    osc1.setVoices(p.oscVoices[0]); osc1.setWidth(p.oscWidth[0]);
+    osc2.setVoices(p.oscVoices[1]); osc2.setWidth(p.oscWidth[1]);
+    osc3.setVoices(p.oscVoices[2]); osc3.setWidth(p.oscWidth[2]);
+    osc4.setVoices(p.oscVoices[3]); osc4.setWidth(p.oscWidth[3]);
+    
+    filter.setType(static_cast<SynthFilter::Type>(p.filterType));
+    baseFEnvAmt = p.filterEnvAmt;
+    baseFKeyTrack = p.filterKeyTrack;
+
+    if (!ampEnv.isActive())
+    {
+        baseO1Level.setCurrentAndTargetValue(p.oscLevel[0]);
+        baseO2Level.setCurrentAndTargetValue(p.oscLevel[1]);
+        baseO3Level.setCurrentAndTargetValue(p.oscLevel[2]);
+        baseO4Level.setCurrentAndTargetValue(p.oscLevel[3]);
+
+        baseO1Pwm.setCurrentAndTargetValue(p.oscPwm[0]);
+        baseO2Pwm.setCurrentAndTargetValue(p.oscPwm[1]);
+        baseO3Pwm.setCurrentAndTargetValue(p.oscPwm[2]);
+        baseO4Pwm.setCurrentAndTargetValue(p.oscPwm[3]);
+
+        baseFCutoff.setCurrentAndTargetValue(p.filterCutoff);
+        baseFRes.setCurrentAndTargetValue(p.filterRes);
+        baseFDrive.setCurrentAndTargetValue(p.filterDrive);
+    }
+    else
+    {
+        baseO1Level.setTargetValue(p.oscLevel[0]);
+        baseO2Level.setTargetValue(p.oscLevel[1]);
+        baseO3Level.setTargetValue(p.oscLevel[2]);
+        baseO4Level.setTargetValue(p.oscLevel[3]);
+
+        baseO1Pwm.setTargetValue(p.oscPwm[0]);
+        baseO2Pwm.setTargetValue(p.oscPwm[1]);
+        baseO3Pwm.setTargetValue(p.oscPwm[2]);
+        baseO4Pwm.setTargetValue(p.oscPwm[3]);
+
+        baseFCutoff.setTargetValue(p.filterCutoff);
+        baseFRes.setTargetValue(p.filterRes);
+        baseFDrive.setTargetValue(p.filterDrive);
+    }
+    
+    ampEnv.setParameters(p.ampParams); filterEnv.setParameters(p.filtParams); modEnv.setParameters(p.modParams);
+    
+    lfo1.setFrequency(p.lfoRate[0]); lfo1.setWaveform(static_cast<LFO::Waveform>(p.lfoWave[0])); baseLfo1Depth = p.lfoDepth[0];
+    lfo2.setFrequency(p.lfoRate[1]); lfo2.setWaveform(static_cast<LFO::Waveform>(p.lfoWave[1])); baseLfo2Depth = p.lfoDepth[1];
+}
+
 void SynthVoice::startNote (int midiNoteNumber, float velocity, juce::SynthesiserSound* sound, int currentPitchWheelPosition)
 {
     juce::ignoreUnused(sound);
-    currentVelocity = velocity;
     currentMidiNote = midiNoteNumber;
-    pitchWheelMoved(currentPitchWheelPosition);
+    currentVelocity.setCurrentAndTargetValue(velocity);
+    
+    float pbVal = ((float)currentPitchWheelPosition / 8192.0f) - 1.0f;
+    currentPitchBend.setCurrentAndTargetValue(pbVal);
 
+    float targetNote = (float)midiNoteNumber;
+    if (currentParams.playMode != 0 && currentParams.glideTime > 0.001f && lastMidiNote >= 0.0f)
+    {
+        currentMidiPitch.setCurrentAndTargetValue(lastMidiNote);
+        currentMidiPitch.reset(currentSampleRate, currentParams.glideTime);
+        currentMidiPitch.setTargetValue(targetNote);
+    }
+    else
+    {
+        currentMidiPitch.reset(currentSampleRate, 0.0);
+        currentMidiPitch.setCurrentAndTargetValue(targetNote);
+    }
+    lastMidiNote = targetNote;
+
+    osc1.randomizePhase(); osc2.randomizePhase(); osc3.randomizePhase(); osc4.randomizePhase();
+    filter.reset();
     ampEnv.noteOn();
     filterEnv.noteOn();
     modEnv.noteOn();
+}
+
+void SynthVoice::retargetNote (int newMidiNote, float newVelocity, bool retriggerEnvelopes)
+{
+    currentMidiNote = newMidiNote;
+    currentVelocity.setTargetValue(newVelocity);
+
+    float targetNote = (float)newMidiNote;
+    if (currentParams.glideTime > 0.001f)
+    {
+        float currentPitch = currentMidiPitch.getCurrentValue();
+        currentMidiPitch.setCurrentAndTargetValue(currentPitch);
+        currentMidiPitch.reset(currentSampleRate, currentParams.glideTime);
+        currentMidiPitch.setTargetValue(targetNote);
+    }
+    else
+    {
+        currentMidiPitch.reset(currentSampleRate, 0.0);
+        currentMidiPitch.setCurrentAndTargetValue(targetNote);
+    }
+    lastMidiNote = targetNote;
+
+    if (retriggerEnvelopes)
+    {
+        ampEnv.noteOn();
+        filterEnv.noteOn();
+        modEnv.noteOn();
+    }
+}
+
+bool SynthVoice::isVoiceActive() const
+{
+    return ampEnv.isActive();
 }
 
 void SynthVoice::stopNote (float velocity, bool allowTailOff)
@@ -39,213 +183,186 @@ void SynthVoice::stopNote (float velocity, bool allowTailOff)
 
 void SynthVoice::pitchWheelMoved (int newPitchWheelValue)
 {
-    // Pitch bend from -2 to +2 semitones
-    currentPitchBend = ((newPitchWheelValue - 8192.0f) / 8192.0f) * 2.0f;
+    float pbVal = ((float)newPitchWheelValue / 8192.0f) - 1.0f;
+    currentPitchBend.setTargetValue(pbVal);
 }
 
 void SynthVoice::controllerMoved (int controllerNumber, int newControllerValue)
 {
     if (controllerNumber == 1) // Mod Wheel
-    {
-        modWheelValue = newControllerValue / 127.0f;
-    }
+        modWheelValue = (float)newControllerValue / 127.0f;
 }
 
-void SynthVoice::prepareToPlay (double sampleRate, int samplesPerBlock, int outputChannels)
+void SynthVoice::calculateModulation(float& o1PitchMod, float& o2PitchMod, float& o3PitchMod, float& o4PitchMod, float& o1PwmMod, float& o2PwmMod, float& o3PwmMod, float& o4PwmMod, float& fCutoffMod, float& fResMod)
 {
-    currentSampleRate = sampleRate;
-    juce::dsp::ProcessSpec spec;
-    spec.maximumBlockSize = samplesPerBlock;
-    spec.sampleRate = sampleRate;
-    spec.numChannels = outputChannels;
-
-    osc1.prepare(sampleRate);
-    osc2.prepare(sampleRate);
-    subOsc.prepare(sampleRate);
-    
-    filter.prepare(spec);
-    
-    ampEnv.setSampleRate(sampleRate);
-    filterEnv.setSampleRate(sampleRate);
-    modEnv.setSampleRate(sampleRate);
-    
-    lfo1.prepare(sampleRate);
-    lfo2.prepare(sampleRate);
-    
-    isPrepared = true;
-}
-
-void SynthVoice::updateBaseParameters(
-    float o1Semi, float o1Detune, float o1Level, float o1Pwm, PolyBLEPOscillator::Waveform o1Wave,
-    float o2Semi, float o2Detune, float o2Level, float o2Pwm, PolyBLEPOscillator::Waveform o2Wave,
-    float subLevel, float subOct, PolyBLEPOscillator::Waveform subWave,
-    float noiseLvl,
-    SynthFilter::Type fType, float fCutoff, float fRes, float fDrive, float fEnvAmt, float fKeyTrack,
-    const DAHDSREnvelope::Parameters& ampParams,
-    const DAHDSREnvelope::Parameters& filtParams,
-    const DAHDSREnvelope::Parameters& modParams,
-    float lfo1Rate, LFO::Waveform lfo1Wave, float lfo1Depth,
-    float lfo2Rate, LFO::Waveform lfo2Wave, float lfo2Depth,
-    const std::array<ModRoute, 8>& modRoutes
-)
-{
-    baseO1Semi = o1Semi; baseO1Detune = o1Detune; baseO1Level = o1Level; baseO1Pwm = o1Pwm; osc1.setWaveform(o1Wave);
-    baseO2Semi = o2Semi; baseO2Detune = o2Detune; baseO2Level = o2Level; baseO2Pwm = o2Pwm; osc2.setWaveform(o2Wave);
-    baseSubLevel = subLevel; baseSubOct = subOct; subOsc.setWaveform(subWave);
-    baseNoiseLvl = noiseLvl;
-
-    filter.setType(fType);
-    baseFCutoff = fCutoff; baseFRes = fRes; baseFDrive = fDrive; baseFEnvAmt = fEnvAmt; baseFKeyTrack = fKeyTrack;
-
-    ampEnv.setParameters(ampParams);
-    filterEnv.setParameters(filtParams);
-    modEnv.setParameters(modParams);
-
-    lfo1.setFrequency(lfo1Rate); lfo1.setWaveform(lfo1Wave); baseLfo1Depth = lfo1Depth;
-    lfo2.setFrequency(lfo2Rate); lfo2.setWaveform(lfo2Wave); baseLfo2Depth = lfo2Depth;
-
-    routes = modRoutes;
-}
-
-void SynthVoice::calculateModulation(float& o1PitchMod, float& o2PitchMod, float& o1PwmMod, float& o2PwmMod, float& fCutoffMod, float& fResMod)
-{
-    // Generate mod sources once per block/sub-block
-    float l1 = lfo1.getNextSample() * baseLfo1Depth;
-    float l2 = lfo2.getNextSample() * baseLfo2Depth;
-    float eF = filterEnv.getNextSample();
-    float eM = modEnv.getNextSample();
-
-    for (const auto& route : routes)
-    {
-        if (route.source == ModSource::None || route.destination == ModDestination::None || route.amount == 0.0f)
-            continue;
-
-        float srcVal = 0.0f;
-        switch (route.source)
-        {
-            case ModSource::LFO1: srcVal = l1; break;
-            case ModSource::LFO2: srcVal = l2; break;
-            case ModSource::EnvFilter: srcVal = eF; break;
-            case ModSource::EnvMod: srcVal = eM; break;
-            case ModSource::Velocity: srcVal = currentVelocity; break;
-            case ModSource::KeyTrack: srcVal = (currentMidiNote - 60.0f) / 60.0f; break; // -1 to 1
-            case ModSource::PitchBend: srcVal = currentPitchBend; break;
-            case ModSource::ModWheel: srcVal = modWheelValue; break;
-            default: break;
-        }
-
-        float mod = srcVal * route.amount;
-        switch (route.destination)
-        {
-            case ModDestination::Osc1Pitch: o1PitchMod += mod; break;
-            case ModDestination::Osc2Pitch: o2PitchMod += mod; break;
-            case ModDestination::Osc1PWM: o1PwmMod += mod; break;
-            case ModDestination::Osc2PWM: o2PwmMod += mod; break;
-            case ModDestination::FilterCutoff: fCutoffMod += mod; break;
-            case ModDestination::FilterRes: fResMod += mod; break;
-            default: break;
-        }
-    }
-    
-    // Inherent Pitch bend and keytrack
-    o1PitchMod += currentPitchBend;
-    o2PitchMod += currentPitchBend;
 }
 
 void SynthVoice::renderNextBlock (juce::AudioBuffer<float>& outputBuffer, int startSample, int numSamples)
 {
-    if (!isPrepared) return;
-
-    // Fast processing loop (block rate modulation to save CPU)
-    // As per critic's suggestion, we will evaluate mod matrix every 16 samples
-    const int SUB_BLOCK_SIZE = 16;
-    int samplesProcessed = 0;
-
-    juce::AudioBuffer<float> subBlockBuffer;
-    subBlockBuffer.setSize(1, SUB_BLOCK_SIZE, false, false, true);
-
-    while (samplesProcessed < numSamples)
-    {
-        int processThisTime = juce::jmin(SUB_BLOCK_SIZE, numSamples - samplesProcessed);
-
-        // --- SUB-BLOCK MODULATION CALCULATION ---
-        float o1PitchMod = 0.0f, o2PitchMod = 0.0f, o1PwmMod = 0.0f, o2PwmMod = 0.0f, fCutoffMod = 0.0f, fResMod = 0.0f;
-        calculateModulation(o1PitchMod, o2PitchMod, o1PwmMod, o2PwmMod, fCutoffMod, fResMod);
-
-        // Apply pitch mods (in semitones)
-        float o1Midi = currentMidiNote + baseO1Semi + (baseO1Detune / 100.0f) + (o1PitchMod * 24.0f); // mod amount 1.0 = 2 octaves
-        float o2Midi = currentMidiNote + baseO2Semi + (baseO2Detune / 100.0f) + (o2PitchMod * 24.0f);
-        float subMidi = currentMidiNote + (baseSubOct * 12.0f) + (o1PitchMod * 24.0f); // sub tracks osc1 pitch bend
-
-        osc1.setFrequency(juce::MidiMessage::getMidiNoteInHertz(o1Midi));
-        osc2.setFrequency(juce::MidiMessage::getMidiNoteInHertz(o2Midi));
-        subOsc.setFrequency(juce::MidiMessage::getMidiNoteInHertz(subMidi));
-
-        osc1.setPWM(baseO1Pwm + o1PwmMod);
-        osc2.setPWM(baseO2Pwm + o2PwmMod);
-        subOsc.setPWM(0.5f); // sub is usually perfect square
-
-        // Filter Cutoff (exponential frequency mapping)
-        // Base is in Hz, we modulate in semitones (octaves)
-        // Plus Filter Env amount
-        float eF = filterEnv.getNextSample(); // get latest for the block
-        float totalCutoffMod = fCutoffMod * 60.0f; // 1.0 = 5 octaves
-        totalCutoffMod += (eF * baseFEnvAmt * 60.0f);
-        totalCutoffMod += ((currentMidiNote - 60.0f) * baseFKeyTrack); // Keytracking in semitones
-
-        float finalCutoff = baseFCutoff * std::pow(2.0f, totalCutoffMod / 12.0f);
-        filter.setCutoff(finalCutoff);
-        filter.setResonance(juce::jlimit(0.0f, 10.0f, baseFRes + fResMod * 10.0f));
-        filter.setDrive(baseFDrive);
-
-        // --- SAMPLE RENDERING ---
-        float ampArray[16] = {0.0f};
-
-        for (int i = 0; i < processThisTime; ++i)
-        {
-            ampArray[i] = ampEnv.getNextSample() * currentVelocity;
-            if (ampEnv.isActive() == false)
-            {
-                clearCurrentNote();
-                return;
-            }
-            
-            // Mix oscillators
-            float s1 = osc1.getNextSample() * baseO1Level;
-            float s2 = osc2.getNextSample() * baseO2Level;
-            float sub = subOsc.getNextSample() * baseSubLevel;
-            
-            float noise = (juce::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f) * baseNoiseLvl;
-
-            float mixed = s1 + s2 + sub + noise;
-            
-            subBlockBuffer.setSample(0, i, mixed);
-        }
-
-        // --- FILTERING ---
-        juce::dsp::AudioBlock<float> block(subBlockBuffer);
-        juce::dsp::AudioBlock<float> subBlock(block.getSubBlock(0, processThisTime));
-        juce::dsp::ProcessContextReplacing<float> context(subBlock);
+    if (!ampEnv.isActive())
+        return;
         
-        filter.process(context);
+    while (numSamples > 0)
+    {
+        int processThisTime = std::min(numSamples, 32);
 
-        // --- AMP AND PAN ---
-        auto* writePtr = subBlockBuffer.getWritePointer(0);
-        for (int i = 0; i < processThisTime; ++i)
-        {
-            writePtr[i] *= ampArray[i];
-        }
+        float o1PitchMod = 0.0f, o2PitchMod = 0.0f, o3PitchMod = 0.0f, o4PitchMod = 0.0f;
+        float fCutoffMod = 0.0f, fResMod = 0.0f, fDriveMod = 0.0f;
+        float o1PwmMod = 0.0f, o2PwmMod = 0.0f, o3PwmMod = 0.0f, o4PwmMod = 0.0f;
+        float ampMod = 0.0f;
 
-        // Copy to output buffer (assuming stereo output)
-        for (int channel = 0; channel < outputBuffer.getNumChannels(); ++channel)
+        float lfo1Val = lfo1.getNextSample() * baseLfo1Depth;
+        float lfo2Val = lfo2.getNextSample() * baseLfo2Depth;
+        float modEnvVal = modEnv.getNextSample();
+        float velVal = currentVelocity.getCurrentValue();
+
+        float srcVals[5] = {lfo1Val, lfo2Val, modEnvVal, velVal, modWheelValue};
+
+        auto applyMod = [&](int dst, float amount) {
+            if (dst == 0) { o1PitchMod += amount; o2PitchMod += amount; o3PitchMod += amount; o4PitchMod += amount; }
+            else if (dst == 1) { fCutoffMod += amount; }
+            else if (dst == 2) { fResMod += amount; }
+            else if (dst == 3) { fDriveMod += amount; }
+            else if (dst == 4) { o1PwmMod += amount; o2PwmMod += amount; o3PwmMod += amount; o4PwmMod += amount; }
+            else if (dst == 5) { ampMod += amount; }
+            else if (dst == 6) { o1PitchMod += amount; }
+            else if (dst == 7) { o2PitchMod += amount; }
+        };
+
+        // 5x8 Matrix routing
+        for (int r = 0; r < 5; ++r)
         {
-            auto* outPtr = outputBuffer.getWritePointer(channel, startSample + samplesProcessed);
-            for (int i = 0; i < processThisTime; ++i)
+            float src = srcVals[r];
+            if (std::abs(src) < 0.00001f) continue;
+
+            for (int c = 0; c < 8; ++c)
             {
-                outPtr[i] += writePtr[i] * 0.15f; // apply master level or amp later
+                int cell = currentParams.modMatrix[r][c];
+                if (cell == 0) continue; // Off
+
+                float amt = 0.0f;
+                if (cell == 1) // Blue: direct fixed connection
+                {
+                    amt = 1.0f;
+                }
+                else if (cell >= 2 && cell <= 5) // Amber, Green, Red, Purple bus amounts
+                {
+                    amt = currentParams.modBusAmts[cell - 2];
+                }
+
+                if (amt != 0.0f)
+                {
+                    applyMod(c, src * amt);
+                }
             }
         }
 
-        samplesProcessed += processThisTime;
+        // Legacy 4-slot routing fallback
+        for (int i = 0; i < 4; ++i) {
+            int src = currentParams.modSrc[i];
+            int dst = currentParams.modDst[i];
+            float amt = currentParams.modAmts[i];
+            if (src >= 0 && src < 5 && amt != 0.0f) {
+                applyMod(dst, srcVals[src] * amt);
+            }
+        }
+
+        float pitch = currentMidiPitch.getNextValue();
+        if (processThisTime > 1)
+            currentMidiPitch.skip (processThisTime - 1);
+
+        float pb = currentPitchBend.getNextValue();
+        if (processThisTime > 1)
+            currentPitchBend.skip (processThisTime - 1);
+
+        o1PitchMod += pb; o2PitchMod += pb; o3PitchMod += pb; o4PitchMod += pb;
+
+        float envMod = filterEnv.getNextSample() * baseFEnvAmt;
+        float keyTrackMod = (pitch - 60.0f) * baseFKeyTrack;
+        float finalCutoff = baseFCutoff.getNextValue() + envMod + (fCutoffMod * 5000.0f) + (keyTrackMod * 100.0f);
+        float finalRes = baseFRes.getNextValue() + (fResMod * 5.0f);
+        float finalDrive = baseFDrive.getNextValue() + (fDriveMod * 5.0f);
+        if (processThisTime > 1)
+        {
+            baseFCutoff.skip (processThisTime - 1);
+            baseFRes.skip (processThisTime - 1);
+            baseFDrive.skip (processThisTime - 1);
+        }
+        
+        filter.setCutoff(finalCutoff);
+        filter.setResonance(finalRes);
+        filter.setDrive(finalDrive);
+
+        auto getHz = [](float midiNote) { return 440.0f * std::pow(2.0f, (midiNote - 69.0f) / 12.0f); };
+
+        // Pitch bend is +/-2 semitones = +/-200 cents; pitch mod is up to +/-24 semitones = +/-2400 cents
+        float pbAndMod1 = (pb * 200.0f) + (o1PitchMod * 2400.0f);
+        float pbAndMod2 = (pb * 200.0f) + (o2PitchMod * 2400.0f);
+        float pbAndMod3 = (pb * 200.0f) + (o3PitchMod * 2400.0f);
+        float pbAndMod4 = (pb * 200.0f) + (o4PitchMod * 2400.0f);
+
+        osc1.setFrequencyAndDetune(getHz(pitch + baseO1Octave * 12.0f), baseO1Detune + pbAndMod1);
+        osc2.setFrequencyAndDetune(getHz(pitch + baseO2Octave * 12.0f), baseO2Detune + pbAndMod2);
+        osc3.setFrequencyAndDetune(getHz(pitch + baseO3Octave * 12.0f), baseO3Detune + pbAndMod3);
+        osc4.setFrequencyAndDetune(getHz(pitch + baseO4Octave * 12.0f), baseO4Detune + pbAndMod4);
+
+        osc1.setPWM(baseO1Pwm.getNextValue() + o1PwmMod);
+        osc2.setPWM(baseO2Pwm.getNextValue() + o2PwmMod);
+        osc3.setPWM(baseO3Pwm.getNextValue() + o3PwmMod);
+        osc4.setPWM(baseO4Pwm.getNextValue() + o4PwmMod);
+
+        int numChannels = outputBuffer.getNumChannels();
+        if (voiceBuffer.getNumChannels() < numChannels || voiceBuffer.getNumSamples() < 32)
+            voiceBuffer.setSize (numChannels, 32, false, false, true);
+
+        voiceBuffer.clear (0, processThisTime);
+
+        for (int step = 0; step < processThisTime; ++step)
+        {
+            float s1L = 0.0f, s1R = 0.0f;
+            float s2L = 0.0f, s2R = 0.0f;
+            float s3L = 0.0f, s3R = 0.0f;
+            float s4L = 0.0f, s4R = 0.0f;
+
+            osc1.getNextStereoSample(s1L, s1R);
+            osc2.getNextStereoSample(s2L, s2R);
+            osc3.getNextStereoSample(s3L, s3R);
+            osc4.getNextStereoSample(s4L, s4R);
+
+            float l1 = baseO1Level.getNextValue();
+            float l2 = baseO2Level.getNextValue();
+            float l3 = baseO3Level.getNextValue();
+            float l4 = baseO4Level.getNextValue();
+
+            float mixL = (s1L * l1) + (s2L * l2) + (s3L * l3) + (s4L * l4);
+            float mixR = (s1R * l1) + (s2R * l2) + (s3R * l3) + (s4R * l4);
+
+            float noise = ((rand() / (float)RAND_MAX) * 2.0f - 1.0f) * currentParams.noiseLevel;
+            mixL += noise;
+            mixR += noise;
+
+            float currentAmpEnv = ampEnv.getNextSample();
+            float finalAmp = std::clamp(currentAmpEnv + ampMod, 0.0f, 1.0f) * 0.25f;
+            
+            voiceBuffer.setSample(0, step, mixL * finalAmp);
+            if (numChannels > 1)
+                voiceBuffer.setSample(1, step, mixR * finalAmp);
+        }
+        
+        juce::dsp::AudioBlock<float> audioBlock (voiceBuffer.getArrayOfWritePointers(), numChannels, 0, processThisTime);
+        juce::dsp::ProcessContextReplacing<float> context (audioBlock);
+        filter.process(context);
+        
+        for (int channel = 0; channel < numChannels; ++channel)
+            outputBuffer.addFrom (channel, startSample, voiceBuffer, channel, 0, processThisTime);
+        
+        // Ensure voice terminates properly
+        if (ampEnv.isActive() == false)
+        {
+            clearCurrentNote();
+        }
+
+        startSample += processThisTime;
+        numSamples -= processThisTime;
     }
 }

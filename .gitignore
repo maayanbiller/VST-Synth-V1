@@ -35,3 +35,7 @@ __pycache__/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Test renders & audio outputs
+headless_gui_render.png
+*.wav

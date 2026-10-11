@@ -24,3 +24,6 @@
 ## 6. Continuous Session Logging (MANDATORY)
 - **Task Logging**: After completing EVERY task, you MUST update a running log file (`SESSION_LOG.md` at the root of the workspace).
 - **Log Contents**: This log must document the work completed, but more importantly, it must capture the main points of the conversation, the decision-making process, and the architectural reasoning. This preserves the context and the "why" behind the "what," ensuring no context is lost across sessions.
+
+## 7. Strict Automation Safety (HANDS OFF Rule)
+- **Mandatory Warning Sign**: Before executing any direct computer controls (mouse movement, keyboard injection, or automated GUI interactions) that could interfere with the user's active session, you MUST spawn a large, highly visible 'HANDS OFF' warning sign on the screen (e.g., via a borderless Tkinter window) to alert the user not to touch their peripherals. NEVER take control of the computer without this visual warning.

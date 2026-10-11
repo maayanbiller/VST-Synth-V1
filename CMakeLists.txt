@@ -35,6 +35,17 @@ target_sources(VSTSynthV1
         Source/UI/PluginEditor.h
 )
 
+juce_add_binary_data(SynthAssets
+    SOURCES
+        Source/UI/wood_board_bg.jpg
+        Source/UI/wood_knob.png
+        Source/UI/wood_fader.png
+        Source/UI/wave_sine.png
+        Source/UI/wave_triangle.png
+        Source/UI/wave_saw.png
+        Source/UI/wave_square.png
+)
+
 # Set compile definitions
 target_compile_definitions(VSTSynthV1
     PUBLIC
@@ -51,6 +62,7 @@ target_link_libraries(VSTSynthV1
         juce::juce_dsp
         juce::juce_gui_basics
         juce::juce_gui_extra
+        SynthAssets
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
@@ -78,6 +90,7 @@ target_link_libraries(SynthTest
         juce::juce_dsp
         juce::juce_gui_basics
         juce::juce_gui_extra
+        SynthAssets
 )
 target_compile_definitions(SynthTest
     PUBLIC
@@ -85,3 +98,15 @@ target_compile_definitions(SynthTest
         JUCE_USE_CURL=0
 )
 juce_generate_juce_header(SynthTest)
+
+# Force rebuild
+
+
+juce_add_console_app(RenderWav)
+target_sources(RenderWav PRIVATE Tests/RenderWav.cpp Source/PluginProcessor.cpp Source/DSP/DAHDSREnvelope.cpp Source/DSP/SynthVoice.cpp Source/UI/PluginEditor.cpp)
+target_link_libraries(RenderWav PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_dsp juce::juce_gui_basics juce::juce_gui_extra SynthAssets)
+target_compile_definitions(RenderWav PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+juce_generate_juce_header(RenderWav)
+
+
+

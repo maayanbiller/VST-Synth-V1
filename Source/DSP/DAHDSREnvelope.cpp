@@ -34,6 +34,22 @@ void DAHDSREnvelope::setParameters (const Parameters& newParams)
 void DAHDSREnvelope::noteOn()
 {
     samplesInCurrentState = 0;
+
+    // Requirement 4: If attack and decay are effectively 0, start immediately on sustain level
+    if (parameters.attack <= 0.002f && parameters.decay <= 0.002f && parameters.delay <= 0.0001f)
+    {
+        currentValue = parameters.sustain;
+        currentState = State::Sustain;
+        stateLengthSamples = 0;
+        return;
+    }
+    else if (parameters.attack <= 0.002f && parameters.delay <= 0.0001f)
+    {
+        currentValue = 1.0f;
+        enterState(State::Hold, true);
+        return;
+    }
+
     enterState(State::Delay, true);
 }
 
@@ -72,7 +88,7 @@ void DAHDSREnvelope::enterState(State newState, bool resetSamples)
             return;
             
         case State::Delay:
-            if (resetSamples) currentValue = 0.0f;
+            if (resetSamples && (parameters.delay > 0.0001f || currentValue == 0.0f)) currentValue = 0.0f;
             stateLengthSamples = static_cast<int>(parameters.delay * sampleRate);
             break;
 
@@ -81,12 +97,9 @@ void DAHDSREnvelope::enterState(State newState, bool resetSamples)
             remainingSamples = stateLengthSamples - samplesInCurrentState;
             if (remainingSamples > 0)
             {
-                // Exponential curve overshooting to 1.01 for snappy attack
-                targetValue = 1.01f;
-                // Solve for coef: we want to reach 1.0 in remainingSamples.
-                // Not perfectly rigorous here, but a fixed time constant works.
-                // Let's use a standard RC approach:
-                coef = 1.0f - std::exp(-5.0f / remainingSamples); 
+                // Exponential curve overshooting to 1.02 for snappy attack
+                targetValue = 1.02f;
+                coef = 1.0f - std::exp(-4.5f / remainingSamples); 
             }
             break;
 
@@ -102,7 +115,7 @@ void DAHDSREnvelope::enterState(State newState, bool resetSamples)
             {
                 // Exponential decay to sustain
                 targetValue = parameters.sustain;
-                coef = 1.0f - std::exp(-5.0f / remainingSamples);
+                coef = 1.0f - std::exp(-4.5f / remainingSamples);
             }
             break;
 
@@ -116,8 +129,12 @@ void DAHDSREnvelope::enterState(State newState, bool resetSamples)
             remainingSamples = stateLengthSamples - samplesInCurrentState;
             if (remainingSamples > 0)
             {
-                targetValue = 0.0f;
-                coef = 1.0f - std::exp(-5.0f / remainingSamples);
+                // Release curve targeting slightly below 0 so it lands on 0.0 with a gentle slope
+                targetValue = -0.015f;
+                float startLevel = std::max(0.0001f, currentValue);
+                float ratio = -targetValue / (startLevel - targetValue);
+                float tc = -std::log(std::clamp(ratio, 0.001f, 0.95f));
+                coef = 1.0f - std::exp(-tc / remainingSamples);
             }
             break;
     }
@@ -159,7 +176,7 @@ float DAHDSREnvelope::getNextSample()
     if (currentState == State::Idle || currentState == State::Sustain || currentState == State::Delay || currentState == State::Hold)
     {
         samplesInCurrentState++;
-        if (stateLengthSamples > 0 && samplesInCurrentState >= stateLengthSamples)
+        if ((currentState == State::Delay || currentState == State::Hold) && samplesInCurrentState >= stateLengthSamples)
             advanceToNextState();
         return currentValue;
     }
@@ -168,7 +185,17 @@ float DAHDSREnvelope::getNextSample()
     currentValue += (targetValue - currentValue) * coef;
     samplesInCurrentState++;
 
-    if (samplesInCurrentState >= stateLengthSamples)
+    if (currentState == State::Release)
+    {
+        // Smooth analog fadeout into silence without sudden hard cut
+        if (currentValue <= 0.0002f || samplesInCurrentState >= stateLengthSamples)
+        {
+            currentValue = 0.0f;
+            enterState(State::Idle, true);
+            return 0.0f;
+        }
+    }
+    else if (samplesInCurrentState >= stateLengthSamples)
     {
         advanceToNextState();
     }

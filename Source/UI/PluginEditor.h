@@ -1,6 +1,11 @@
 #pragma once
 #include <JuceHeader.h>
 #include "../PluginProcessor.h"
+#include "SynthLookAndFeel.h"
+#include "LabeledSlider.h"
+
+
+#include "ModMatrixComponent.h"
 
 class VSTSynthV1AudioProcessorEditor : public juce::AudioProcessorEditor
 {
@@ -13,80 +18,53 @@ public:
 
 private:
     VSTSynthV1AudioProcessor& audioProcessor;
+    SynthLookAndFeel customLookAndFeel;
 
-    // Component Groups
-    juce::GroupComponent osc1Group{"Osc1", "Oscillator 1"};
-    juce::GroupComponent osc2Group{"Osc2", "Oscillator 2"};
-    juce::GroupComponent filterGroup{"Filter", "Filter"};
-    juce::GroupComponent envGroup{"Env", "Envelopes"};
-    juce::GroupComponent lfoGroup{"LFO", "LFOs"};
+    juce::GroupComponent osc1Group{"", "OSC 1"}, osc2Group{"", "OSC 2"}, osc3Group{"", "OSC 3"}, osc4Group{"", "OSC 4"};
+    juce::GroupComponent filterGroup{"", "FILTER"}, mixerGroup{"", "MIXER"}, envGroup{"", "ENVELOPES"}, lfoGroup{"", "LFO"};
 
-    // Attachments
-    using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
-    using ComboBoxAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+    LabeledSlider osc1WaveSlider{"Wave", juce::Slider::RotaryHorizontalVerticalDrag, false}, osc1OctSlider{"Octave"}, osc1DetuneSlider{"Detune"}, osc1PwmSlider{"PWM"}, osc1VoicesSlider{"Voices"}, osc1WidthSlider{"Width"};
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> osc1WaveAttach, osc1OctAttach, osc1DetuneAttach, osc1PwmAttach, osc1VoicesAttach, osc1WidthAttach;
 
-    juce::ComboBox osc1WaveCombo;
-    std::unique_ptr<ComboBoxAttachment> osc1WaveComboAtt;
-    juce::Slider osc1SemiSlider;
-    std::unique_ptr<SliderAttachment> osc1SemiSliderAtt;
-    juce::Slider osc1DetuneSlider;
-    std::unique_ptr<SliderAttachment> osc1DetuneSliderAtt;
-    juce::Slider osc1LevelSlider;
-    std::unique_ptr<SliderAttachment> osc1LevelSliderAtt;
-    juce::Slider osc1PwmSlider;
-    std::unique_ptr<SliderAttachment> osc1PwmSliderAtt;
-    juce::ComboBox osc2WaveCombo;
-    std::unique_ptr<ComboBoxAttachment> osc2WaveComboAtt;
-    juce::Slider osc2SemiSlider;
-    std::unique_ptr<SliderAttachment> osc2SemiSliderAtt;
-    juce::Slider osc2DetuneSlider;
-    std::unique_ptr<SliderAttachment> osc2DetuneSliderAtt;
-    juce::Slider osc2LevelSlider;
-    std::unique_ptr<SliderAttachment> osc2LevelSliderAtt;
-    juce::Slider osc2PwmSlider;
-    std::unique_ptr<SliderAttachment> osc2PwmSliderAtt;
-    juce::ComboBox subWaveCombo;
-    std::unique_ptr<ComboBoxAttachment> subWaveComboAtt;
-    juce::Slider subOctSlider;
-    std::unique_ptr<SliderAttachment> subOctSliderAtt;
-    juce::Slider subLevelSlider;
-    std::unique_ptr<SliderAttachment> subLevelSliderAtt;
-    juce::Slider noiseLevelSlider;
-    std::unique_ptr<SliderAttachment> noiseLevelSliderAtt;
-    juce::ComboBox filterTypeCombo;
-    std::unique_ptr<ComboBoxAttachment> filterTypeComboAtt;
-    juce::Slider filterCutoffSlider;
-    std::unique_ptr<SliderAttachment> filterCutoffSliderAtt;
-    juce::Slider filterResSlider;
-    std::unique_ptr<SliderAttachment> filterResSliderAtt;
-    juce::Slider filterDriveSlider;
-    std::unique_ptr<SliderAttachment> filterDriveSliderAtt;
-    juce::Slider filterEnvAmtSlider;
-    std::unique_ptr<SliderAttachment> filterEnvAmtSliderAtt;
-    juce::Slider ampAttackSlider;
-    std::unique_ptr<SliderAttachment> ampAttackSliderAtt;
-    juce::Slider ampDecaySlider;
-    std::unique_ptr<SliderAttachment> ampDecaySliderAtt;
-    juce::Slider ampSustainSlider;
-    std::unique_ptr<SliderAttachment> ampSustainSliderAtt;
-    juce::Slider ampReleaseSlider;
-    std::unique_ptr<SliderAttachment> ampReleaseSliderAtt;
-    juce::Slider filtAttackSlider;
-    std::unique_ptr<SliderAttachment> filtAttackSliderAtt;
-    juce::Slider filtDecaySlider;
-    std::unique_ptr<SliderAttachment> filtDecaySliderAtt;
-    juce::Slider filtSustainSlider;
-    std::unique_ptr<SliderAttachment> filtSustainSliderAtt;
-    juce::Slider filtReleaseSlider;
-    std::unique_ptr<SliderAttachment> filtReleaseSliderAtt;
-    juce::ComboBox lfo1WaveCombo;
-    std::unique_ptr<ComboBoxAttachment> lfo1WaveComboAtt;
-    juce::Slider lfo1RateSlider;
-    std::unique_ptr<SliderAttachment> lfo1RateSliderAtt;
-    juce::Slider lfo1DepthSlider;
-    std::unique_ptr<SliderAttachment> lfo1DepthSliderAtt;
-    juce::Slider masterVolSlider;
-    std::unique_ptr<SliderAttachment> masterVolSliderAtt;
+    LabeledSlider osc2WaveSlider{"Wave", juce::Slider::RotaryHorizontalVerticalDrag, false}, osc2OctSlider{"Octave"}, osc2DetuneSlider{"Detune"}, osc2PwmSlider{"PWM"}, osc2VoicesSlider{"Voices"}, osc2WidthSlider{"Width"};
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> osc2WaveAttach, osc2OctAttach, osc2DetuneAttach, osc2PwmAttach, osc2VoicesAttach, osc2WidthAttach;
+
+    LabeledSlider osc3WaveSlider{"Wave", juce::Slider::RotaryHorizontalVerticalDrag, false}, osc3OctSlider{"Octave"}, osc3DetuneSlider{"Detune"}, osc3PwmSlider{"PWM"}, osc3VoicesSlider{"Voices"}, osc3WidthSlider{"Width"};
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> osc3WaveAttach, osc3OctAttach, osc3DetuneAttach, osc3PwmAttach, osc3VoicesAttach, osc3WidthAttach;
+
+    LabeledSlider osc4WaveSlider{"Wave", juce::Slider::RotaryHorizontalVerticalDrag, false}, osc4OctSlider{"Octave"}, osc4DetuneSlider{"Detune"}, osc4PwmSlider{"PWM"}, osc4VoicesSlider{"Voices"}, osc4WidthSlider{"Width"};
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> osc4WaveAttach, osc4OctAttach, osc4DetuneAttach, osc4PwmAttach, osc4VoicesAttach, osc4WidthAttach;
+
+    LabeledSlider osc1LevelSlider{"OSC 1", juce::Slider::LinearVertical}, osc2LevelSlider{"OSC 2", juce::Slider::LinearVertical}, 
+                  osc3LevelSlider{"OSC 3", juce::Slider::LinearVertical}, osc4LevelSlider{"OSC 4", juce::Slider::LinearVertical}, 
+                  masterVolSlider{"Master", juce::Slider::LinearVertical};
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> osc1LevelAttach, osc2LevelAttach, osc3LevelAttach, osc4LevelAttach, masterVolAttach;
+
+    LabeledSlider filterCutoffSlider{"Cutoff"}, filterResSlider{"Resonance"}, filterDriveSlider{"Drive"}, filterEnvAmtSlider{"Env Amt"};
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> filterCutoffAttach, filterResAttach, filterDriveAttach, filterEnvAmtAttach;
+
+    LabeledSlider ampAttackSlider{"A", juce::Slider::LinearVertical}, ampDecaySlider{"D", juce::Slider::LinearVertical}, ampSustainSlider{"S", juce::Slider::LinearVertical}, ampReleaseSlider{"R", juce::Slider::LinearVertical};
+    LabeledSlider filtAttackSlider{"A", juce::Slider::LinearVertical}, filtDecaySlider{"D", juce::Slider::LinearVertical}, filtSustainSlider{"S", juce::Slider::LinearVertical}, filtReleaseSlider{"R", juce::Slider::LinearVertical};
+    LabeledSlider modAttackSlider{"A", juce::Slider::LinearVertical}, modDecaySlider{"D", juce::Slider::LinearVertical}, modSustainSlider{"S", juce::Slider::LinearVertical}, modReleaseSlider{"R", juce::Slider::LinearVertical};
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> ampAttackAttach, ampDecayAttach, ampSustainAttach, ampReleaseAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> filtAttackAttach, filtDecayAttach, filtSustainAttach, filtReleaseAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> modAttackAttach, modDecayAttach, modSustainAttach, modReleaseAttach;
+    
+    juce::Label ampLabel{"", "AMP ENV"}, filtLabel{"", "FILTER ENV"}, modLabel{"", "MOD ENV"};
+
+    LabeledSlider lfo1WaveSlider{"Wave 1", juce::Slider::RotaryHorizontalVerticalDrag, false}, lfo1RateSlider{"Rate 1"}, lfo1DepthSlider{"Depth 1"};
+    LabeledSlider lfo2WaveSlider{"Wave 2", juce::Slider::RotaryHorizontalVerticalDrag, false}, lfo2RateSlider{"Rate 2"}, lfo2DepthSlider{"Depth 2"};
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfo1WaveAttach, lfo1RateAttach, lfo1DepthAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfo2WaveAttach, lfo2RateAttach, lfo2DepthAttach;
+
+    juce::GroupComponent modGroup{"", "MOD MATRIX"};
+    std::unique_ptr<VintageModMatrixComponent> vintageModMatrix;
+
+    juce::GroupComponent playGroup{"", "PLAY"}, noiseGroup{"", "NOISE"};
+    LabeledSlider playModeSlider{"Mode"}, glideSlider{"Glide"};
+    LabeledSlider noiseLevelSlider{"Level"}, noiseColorSlider{"Color"};
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> playModeAttach, glideAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> noiseLevelAttach, noiseColorAttach;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VSTSynthV1AudioProcessorEditor)
 };

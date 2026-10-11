@@ -1,13 +1,20 @@
 #pragma once
 #include <JuceHeader.h>
 
+
 class LabeledSlider : public juce::Component
 {
 public:
-    LabeledSlider(const juce::String& name)
+    class CustomSlider : public juce::Slider {};
+
+    LabeledSlider(const juce::String& name, juce::Slider::SliderStyle style = juce::Slider::RotaryHorizontalVerticalDrag, bool useTextBox = true)
+
     {
-        slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+        slider.setSliderStyle(style);
+        showTextBox = useTextBox;
+        
+        slider.setName(name);
+        
         addAndMakeVisible(slider);
 
         label.setText(name, juce::dontSendNotification);
@@ -18,10 +25,24 @@ public:
     void resized() override
     {
         auto area = getLocalBounds();
-        label.setBounds(area.removeFromTop(20));
+        
+        if (label.getText().isNotEmpty())
+            label.setBounds(area.removeFromTop(15));
+        
+        if (area.getHeight() < 40)
+            slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        else
+            
+            if (showTextBox) slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 85, 20);
+            else slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+
+
         slider.setBounds(area);
     }
 
-    juce::Slider slider;
+    CustomSlider slider;
     juce::Label label;
+    bool showTextBox = true;
+    
 };
+
