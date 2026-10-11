@@ -387,6 +387,97 @@ int main()
         logTest("Mod Matrix: Parameters accessible and route correctly", cellR0C1 != nullptr && cellR1C0 != nullptr);
     }
 
+    // -------------------------------------------------------------
+    // Test 10: Unison Width = 0 Mono Mathematical Equality (L == R)
+    // -------------------------------------------------------------
+    {
+        UnisonOscillator unison;
+        unison.prepare(44100.0);
+        unison.setWaveform(PolyBLEPOscillator::Waveform::Saw);
+        unison.setVoices(8);
+        unison.setWidth(0.0f); // 0% width -> Mono
+        unison.setFrequencyAndDetune(440.0f, 0.0f);
+
+        bool perfectlyIdentical = true;
+        for (int i = 0; i < 2000; ++i)
+        {
+            float l = 0.0f, r = 0.0f;
+            unison.getNextStereoSample(l, r);
+            if (std::abs(l - r) > 1e-6f)
+            {
+                perfectlyIdentical = false;
+                break;
+            }
+        }
+        logTest("Unison: Width = 0 produces mathematically identical bit-for-bit mono (L == R)", perfectlyIdentical);
+    }
+
+    // -------------------------------------------------------------
+    // Test 11: Envelope Attack True Zero Start (currentValue starts at 0.0)
+    // -------------------------------------------------------------
+    {
+        DAHDSREnvelope env;
+        env.setSampleRate(44100.0);
+        DAHDSREnvelope::Parameters p { 0.0f, 0.10f, 0.0f, 0.10f, 1.0f, 0.10f }; // 100ms attack
+        env.setParameters(p);
+        env.noteOn();
+        float firstSample = env.getNextSample();
+        logTest("Envelope Attack: First sample starts smoothly near 0.0 without initial jump (< 0.001f)", firstSample >= 0.0f && firstSample < 0.001f);
+    }
+
+    // -------------------------------------------------------------
+    // Test 12: Noise Shaping Spectral Filtering (-1.0 Red vs +1.0 Violet)
+    // -------------------------------------------------------------
+    {
+        VSTSynthV1AudioProcessor processor;
+        processor.prepareToPlay(44100.0, 512);
+
+        // Red Noise (Low-pass filtered)
+        *processor.apvts.getRawParameterValue(IDs::NOISE_LEVEL) = 0.8f;
+        *processor.apvts.getRawParameterValue(IDs::NOISE_COLOR) = -1.0f;
+        *processor.apvts.getRawParameterValue(IDs::OSC1_LEVEL) = 0.0f;
+        *processor.apvts.getRawParameterValue(IDs::FILTER_CUTOFF) = 20000.0f;
+
+        juce::AudioBuffer<float> redBuf(2, 44100);
+        redBuf.clear();
+        juce::MidiBuffer midiRed;
+        midiRed.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)127), 0);
+        processor.processBlock(redBuf, midiRed);
+        float redRms = redBuf.getRMSLevel(0, 5000, 30000);
+
+        // Violet Noise (High-pass filtered)
+        processor.synth.allNotesOff(1, false);
+        *processor.apvts.getRawParameterValue(IDs::NOISE_COLOR) = 1.0f;
+        juce::AudioBuffer<float> violetBuf(2, 44100);
+        violetBuf.clear();
+        juce::MidiBuffer midiViolet;
+        midiViolet.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)127), 0);
+        processor.processBlock(violetBuf, midiViolet);
+        float violetRms = violetBuf.getRMSLevel(0, 5000, 30000);
+
+        logTest("Noise Shaping: Both Red and Violet noise generate robust audio signals", redRms > 0.005f && violetRms > 0.005f);
+    }
+
+    // -------------------------------------------------------------
+    // Test 13: Parameter String Formatting & Calibrated Values
+    // -------------------------------------------------------------
+    {
+        VSTSynthV1AudioProcessor processor;
+        auto* envParam = processor.apvts.getParameter(IDs::AMP_ATTACK);
+        juce::String env0 = envParam->getText(0.0f, 0);
+        logTest("Parameter Formatting: 0.0 Attack formats as '0 ms'", env0 == "0 ms");
+
+        auto* detuneParam = processor.apvts.getParameter(IDs::OSC1_DETUNE);
+        juce::String detune0 = detuneParam->getText(0.5f, 0); // center is 0 cents
+        logTest("Parameter Formatting: Center Detune formats as '0 ct'", detune0 == "0 ct");
+
+        auto* noiseColorParam = processor.apvts.getParameter(IDs::NOISE_COLOR);
+        juce::String ncRed = noiseColorParam->getText(0.0f, 0); // normalized 0.0 = val -1.0
+        juce::String ncWhite = noiseColorParam->getText(0.5f, 0); // normalized 0.5 = val 0.0
+        juce::String ncViolet = noiseColorParam->getText(1.0f, 0); // normalized 1.0 = val +1.0
+        logTest("Parameter Formatting: Noise Color names format as Red/White/Violet", ncRed == "Red" && ncWhite == "White" && ncViolet == "Violet");
+    }
+
     std::cout << "\n>>> ALL 16-VOICE POLYPHONY & DSP TESTS PASSED FLAWLESSLY! <<<" << std::endl;
     return 0;
 }

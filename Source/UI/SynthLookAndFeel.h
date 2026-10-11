@@ -67,15 +67,18 @@ public:
                            float sliderPosProportional, float rotaryStartAngle, float rotaryEndAngle,
                            juce::Slider& slider) override
     {
+        bool isWave = slider.getName().containsIgnoreCase("Wave");
         auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat();
-        auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
+        float minDim = juce::jmin(bounds.getWidth(), bounds.getHeight());
+        auto radius = isWave ? (minDim * 0.28f)
+                             : (minDim / 2.0f);
         auto centreX = bounds.getCentreX();
         auto centreY = bounds.getCentreY();
         auto rx = centreX - radius;
         auto ry = centreY - radius;
         auto rw = radius * 2.0f;
 
-// Draw shadow
+        // Draw shadow
         g.setColour(juce::Colours::black.withAlpha(0.6f));
         g.fillEllipse(rx + 2.0f, ry + 4.0f, rw, rw);
 
@@ -105,34 +108,37 @@ public:
             g.fillPath(p);
         }
 
-
-        // Draw waveform badge icons if needed
-        if (slider.getName().containsIgnoreCase("Wave"))
+        // Draw clean silkscreen waveform icons around knob without circular bezels
+        if (isWave)
         {
-            float r2 = radius + 22.0f;
-            float badgeSize = 24.0f;
+            float r2 = radius + minDim * 0.15f;
+            float iconSize = std::clamp(minDim * 0.18f, 15.0f, 20.0f);
             for (int i = 0; i < 4; ++i) {
                 float a = rotaryStartAngle + (i / 3.0f) * (rotaryEndAngle - rotaryStartAngle);
                 float px = centreX + r2 * std::sin(a);
                 float py = centreY - r2 * std::cos(a);
                 bool isSelected = (std::round(slider.getValue()) == i);
 
-                auto badgeRect = juce::Rectangle<float>(px - badgeSize * 0.5f, py - badgeSize * 0.5f, badgeSize, badgeSize);
+                auto iconRect = juce::Rectangle<float>(px - iconSize * 0.5f, py - iconSize * 0.5f, iconSize, iconSize);
+
+                if (isSelected)
+                {
+                    // Warm golden halo glow around active waveform symbol
+                    g.setColour(juce::Colour(0xffffaa22).withAlpha(0.35f));
+                    g.fillEllipse(iconRect.expanded(4.0f));
+
+                    // Subtle illuminated radial pointer tick
+                    g.setColour(juce::Colour(0xffffcc44));
+                    float t1 = radius + 2.0f;
+                    float t2 = radius + 6.0f;
+                    g.drawLine(centreX + t1 * std::sin(a), centreY - t1 * std::cos(a),
+                               centreX + t2 * std::sin(a), centreY - t2 * std::cos(a), 2.0f);
+                }
 
                 if (cachedWaveImages[i].isValid())
                 {
-                    if (isSelected)
-                    {
-                        // Warm amber/gold halo glow around active badge
-                        g.setColour(juce::Colour(0xffffaa22).withAlpha(0.6f));
-                        g.drawRoundedRectangle(badgeRect.expanded(2.0f), 5.0f, 2.0f);
-                        g.setOpacity(1.0f);
-                    }
-                    else
-                    {
-                        g.setOpacity(0.40f);
-                    }
-                    g.drawImageWithin(cachedWaveImages[i], badgeRect.getX(), badgeRect.getY(), badgeRect.getWidth(), badgeRect.getHeight(), juce::RectanglePlacement::centred);
+                    g.setOpacity(isSelected ? 1.0f : 0.40f);
+                    g.drawImageWithin(cachedWaveImages[i], iconRect.getX(), iconRect.getY(), iconRect.getWidth(), iconRect.getHeight(), juce::RectanglePlacement::centred);
                     g.setOpacity(1.0f);
                 }
                 else
@@ -140,25 +146,25 @@ public:
                     // Fallback vector drawing
                     juce::Path icon;
                     if (i == 0) { // Sine
-                        icon.startNewSubPath(px - 10, py);
-                        icon.quadraticTo(px - 5.0f, py - 10, px, py);
-                        icon.quadraticTo(px + 5.0f, py + 10, px + 10, py);
+                        icon.startNewSubPath(px - 8, py);
+                        icon.quadraticTo(px - 4.0f, py - 6, px, py);
+                        icon.quadraticTo(px + 4.0f, py + 6, px + 8, py);
                     } else if (i == 1) { // Triangle
-                        icon.startNewSubPath(px - 10, py + 6);
-                        icon.lineTo(px, py - 8);
-                        icon.lineTo(px + 10, py + 6);
+                        icon.startNewSubPath(px - 8, py + 5);
+                        icon.lineTo(px, py - 6);
+                        icon.lineTo(px + 8, py + 5);
                     } else if (i == 2) { // Saw
-                        icon.startNewSubPath(px - 8, py + 6);
-                        icon.lineTo(px + 8, py - 8);
-                        icon.lineTo(px + 8, py + 6);
+                        icon.startNewSubPath(px - 7, py + 5);
+                        icon.lineTo(px + 7, py - 6);
+                        icon.lineTo(px + 7, py + 5);
                     } else if (i == 3) { // Square
-                        icon.startNewSubPath(px - 8, py + 6);
-                        icon.lineTo(px - 8, py - 6);
-                        icon.lineTo(px + 8, py - 6);
-                        icon.lineTo(px + 8, py + 6);
+                        icon.startNewSubPath(px - 7, py + 5);
+                        icon.lineTo(px - 7, py - 5);
+                        icon.lineTo(px + 7, py - 5);
+                        icon.lineTo(px + 7, py + 5);
                     }
-                    g.setColour(isSelected ? juce::Colour(0xffe8dcca) : juce::Colour(0xffe8dcca).withAlpha(0.3f));
-                    g.strokePath(icon, juce::PathStrokeType(isSelected ? 2.5f : 1.5f, juce::PathStrokeType::curved));
+                    g.setColour(isSelected ? juce::Colour(0xffffcc44) : juce::Colour(0xffe8dcca).withAlpha(0.40f));
+                    g.strokePath(icon, juce::PathStrokeType(isSelected ? 2.2f : 1.4f, juce::PathStrokeType::curved));
                 }
             }
         }
@@ -170,11 +176,32 @@ public:
                                     const juce::String& text, const juce::Justification& position,
                                     juce::GroupComponent& group) override
     {
-        // Don't draw the harsh bounding box. Just draw the text beautifully.
-        juce::Rectangle<int> r (0, 0, width, height);
-        g.setColour (group.findColour (juce::GroupComponent::textColourId));
-        g.setFont (14.0f);
-        g.drawText (text, r.withTrimmedTop(2).withHeight(18), juce::Justification::centredTop, false);
+        auto bounds = juce::Rectangle<int>(0, 0, width, height).toFloat().reduced(1.0f);
+        
+        // Recessed faceplate: smoked anodized metal / dark plate
+        juce::ColourGradient grad(juce::Colours::black.withAlpha(0.25f), bounds.getX(), bounds.getY(),
+                                  juce::Colours::black.withAlpha(0.42f), bounds.getX(), bounds.getBottom(), false);
+        g.setGradientFill(grad);
+        g.fillRoundedRectangle(bounds, 6.0f);
+
+        // Inset bevel and border
+        g.setColour(juce::Colours::black.withAlpha(0.55f));
+        g.drawRoundedRectangle(bounds, 6.0f, 1.2f);
+        g.setColour(juce::Colours::white.withAlpha(0.07f));
+        g.drawRoundedRectangle(bounds.reduced(1.0f), 5.0f, 1.0f);
+
+        // Header plate for title
+        if (text.isNotEmpty())
+        {
+            auto titleArea = bounds.removeFromTop(20.0f);
+            g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+            g.setColour(juce::Colour(0xffd8cbba));
+            g.drawText(text, titleArea, juce::Justification::centred, false);
+            
+            // Subtle engraved hairline under title
+            g.setColour(juce::Colours::white.withAlpha(0.06f));
+            g.drawLine(titleArea.getX() + 20.0f, titleArea.getBottom(), titleArea.getRight() - 20.0f, titleArea.getBottom(), 1.0f);
+        }
     }
 
     void drawButtonBackground (juce::Graphics& g, juce::Button& button, const juce::Colour& backgroundColour,

@@ -97,6 +97,7 @@ private:
     
     float baseFEnvAmt = 0.0f, baseFKeyTrack = 0.0f;
     float baseLfo1Depth = 1.0f, baseLfo2Depth = 1.0f;
+    float noiseZ1 = 0.0f, noiseZ2 = 0.0f;
 
     juce::AudioBuffer<float> voiceBuffer;
 };

@@ -35,21 +35,22 @@ void DAHDSREnvelope::noteOn()
 {
     samplesInCurrentState = 0;
 
-    // Requirement 4: If attack and decay are effectively 0, start immediately on sustain level
-    if (parameters.attack <= 0.002f && parameters.decay <= 0.002f && parameters.delay <= 0.0001f)
+    // If attack and decay are effectively 0, start immediately on sustain level
+    if (parameters.attack <= 0.0005f && parameters.decay <= 0.0005f && parameters.delay <= 0.0001f)
     {
         currentValue = parameters.sustain;
         currentState = State::Sustain;
         stateLengthSamples = 0;
         return;
     }
-    else if (parameters.attack <= 0.002f && parameters.delay <= 0.0001f)
+    else if (parameters.attack <= 0.0005f && parameters.delay <= 0.0001f)
     {
         currentValue = 1.0f;
         enterState(State::Hold, true);
         return;
     }
 
+    currentValue = 0.0f;
     enterState(State::Delay, true);
 }
 
@@ -88,18 +89,18 @@ void DAHDSREnvelope::enterState(State newState, bool resetSamples)
             return;
             
         case State::Delay:
-            if (resetSamples && (parameters.delay > 0.0001f || currentValue == 0.0f)) currentValue = 0.0f;
+            if (resetSamples) currentValue = 0.0f;
             stateLengthSamples = static_cast<int>(parameters.delay * sampleRate);
             break;
 
         case State::Attack:
+            if (resetSamples) currentValue = 0.0f;
             stateLengthSamples = static_cast<int>(parameters.attack * sampleRate);
             remainingSamples = stateLengthSamples - samplesInCurrentState;
             if (remainingSamples > 0)
             {
-                // Exponential curve overshooting to 1.02 for snappy attack
                 targetValue = 1.02f;
-                coef = 1.0f - std::exp(-4.5f / remainingSamples); 
+                coef = 1.0f - std::exp(-4.5f / (float)remainingSamples); 
             }
             break;
 
@@ -113,9 +114,8 @@ void DAHDSREnvelope::enterState(State newState, bool resetSamples)
             remainingSamples = stateLengthSamples - samplesInCurrentState;
             if (remainingSamples > 0)
             {
-                // Exponential decay to sustain
                 targetValue = parameters.sustain;
-                coef = 1.0f - std::exp(-4.5f / remainingSamples);
+                coef = 1.0f - std::exp(-4.5f / (float)remainingSamples);
             }
             break;
 
@@ -126,16 +126,9 @@ void DAHDSREnvelope::enterState(State newState, bool resetSamples)
 
         case State::Release:
             stateLengthSamples = static_cast<int>(parameters.release * sampleRate);
-            remainingSamples = stateLengthSamples - samplesInCurrentState;
-            if (remainingSamples > 0)
-            {
-                // Release curve targeting slightly below 0 so it lands on 0.0 with a gentle slope
-                targetValue = -0.015f;
-                float startLevel = std::max(0.0001f, currentValue);
-                float ratio = -targetValue / (startLevel - targetValue);
-                float tc = -std::log(std::clamp(ratio, 0.001f, 0.95f));
-                coef = 1.0f - std::exp(-tc / remainingSamples);
-            }
+            remainingSamples = std::max(1, stateLengthSamples - samplesInCurrentState);
+            // Pure analog RC discharge targeting 0.0 with 60 dB decay over release time
+            releaseMultiplier = std::exp(-6.90775f / (float)remainingSamples);
             break;
     }
 
@@ -181,24 +174,30 @@ float DAHDSREnvelope::getNextSample()
         return currentValue;
     }
 
-    // Exponential RC curve processing
-    currentValue += (targetValue - currentValue) * coef;
-    samplesInCurrentState++;
-
     if (currentState == State::Release)
     {
-        // Smooth analog fadeout into silence without sudden hard cut
-        if (currentValue <= 0.0002f || samplesInCurrentState >= stateLengthSamples)
+        currentValue *= releaseMultiplier;
+        samplesInCurrentState++;
+
+        // Seamless asymptotic termination at inaudible noise floor (-94 dB)
+        if (currentValue < 0.00002f)
         {
             currentValue = 0.0f;
             enterState(State::Idle, true);
             return 0.0f;
         }
+        return currentValue;
     }
-    else if (samplesInCurrentState >= stateLengthSamples)
+
+    // Exponential RC curve processing for Attack & Decay
+    float output = currentValue;
+    currentValue += (targetValue - currentValue) * coef;
+    samplesInCurrentState++;
+
+    if (samplesInCurrentState >= stateLengthSamples)
     {
         advanceToNextState();
     }
 
-    return std::clamp(currentValue, 0.0f, 1.0f);
+    return std::clamp(output, 0.0f, 1.0f);
 }

@@ -19,6 +19,8 @@ public:
 
         label.setText(name, juce::dontSendNotification);
         label.setJustificationType(juce::Justification::centred);
+        label.setBorderSize(juce::BorderSize<int>(0));
+        label.setFont(juce::Font(juce::FontOptions(9.5f, juce::Font::bold)));
         addAndMakeVisible(label);
     }
 

@@ -142,6 +142,15 @@ public:
         auto setupBusSlider = [this](LabeledSlider& s, const juce::String& paramId, std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& attach) {
             s.slider.setLookAndFeel(&customLF);
             attach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, paramId, s.slider);
+            if (auto* param = apvts.getParameter(paramId))
+            {
+                s.slider.textFromValueFunction = [param](double v) {
+                    return param->getText(param->convertTo0to1((float)v), 0);
+                };
+                s.slider.valueFromTextFunction = [param](const juce::String& text) {
+                    return (double)param->convertFrom0to1(param->getValueForText(text));
+                };
+            }
             addAndMakeVisible(s);
         };
 

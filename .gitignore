@@ -39,3 +39,5 @@ Thumbs.db
 # Test renders & audio outputs
 headless_gui_render.png
 *.wav
+*.txt
+*.log

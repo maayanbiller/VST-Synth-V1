@@ -124,6 +124,7 @@ void SynthVoice::startNote (int midiNoteNumber, float velocity, juce::Synthesise
     lastMidiNote = targetNote;
 
     osc1.randomizePhase(); osc2.randomizePhase(); osc3.randomizePhase(); osc4.randomizePhase();
+    noiseZ1 = 0.0f; noiseZ2 = 0.0f;
     filter.reset();
     ampEnv.noteOn();
     filterEnv.noteOn();
@@ -337,7 +338,31 @@ void SynthVoice::renderNextBlock (juce::AudioBuffer<float>& outputBuffer, int st
             float mixL = (s1L * l1) + (s2L * l2) + (s3L * l3) + (s4L * l4);
             float mixR = (s1R * l1) + (s2R * l2) + (s3R * l3) + (s4R * l4);
 
-            float noise = ((rand() / (float)RAND_MAX) * 2.0f - 1.0f) * currentParams.noiseLevel;
+            float rawNoise = ((rand() / (float)RAND_MAX) * 2.0f - 1.0f);
+            float shapedNoise = rawNoise;
+            float nColor = currentParams.noiseColor;
+
+            if (nColor < -0.05f)
+            {
+                // Brown / Red lowpass noise (cutoff sweeps from 150 Hz to 8 kHz)
+                float norm = (nColor + 1.0f) / 0.95f;
+                float cutoff = 150.0f * std::pow(50.0f, norm);
+                float alpha = std::clamp(2.0f * juce::MathConstants<float>::pi * cutoff / (float)currentSampleRate, 0.001f, 0.95f);
+                noiseZ1 += alpha * (rawNoise - noiseZ1);
+                noiseZ2 += alpha * (noiseZ1 - noiseZ2);
+                shapedNoise = noiseZ2 * 2.5f;
+            }
+            else if (nColor > 0.05f)
+            {
+                // Blue / Violet highpass noise (cutoff sweeps from 500 Hz to 6 kHz)
+                float norm = (nColor - 0.05f) / 0.95f;
+                float cutoff = 500.0f * std::pow(12.0f, norm);
+                float alpha = std::clamp(2.0f * juce::MathConstants<float>::pi * cutoff / (float)currentSampleRate, 0.001f, 0.95f);
+                noiseZ1 += alpha * (rawNoise - noiseZ1);
+                shapedNoise = (rawNoise - noiseZ1) * 1.6f;
+            }
+
+            float noise = shapedNoise * currentParams.noiseLevel;
             mixL += noise;
             mixR += noise;
 

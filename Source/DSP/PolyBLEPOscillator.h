@@ -177,9 +177,23 @@ public:
             return;
         }
 
+        float norm = 1.0f / std::sqrt(static_cast<float>(numVoices));
+
+        // When width is 0, sum all voices into true mono with bit-for-bit identical L and R
+        if (stereoWidth <= 0.001f)
+        {
+            float sum = 0.0f;
+            for (int i = 0; i < numVoices; ++i)
+                sum += voices[i].getNextSample();
+
+            float s = sum * norm * 0.7071f;
+            outL = s;
+            outR = s;
+            return;
+        }
+
         float sumL = 0.0f;
         float sumR = 0.0f;
-        float norm = 1.0f / std::sqrt(static_cast<float>(numVoices));
 
         for (int i = 0; i < numVoices; ++i)
         {

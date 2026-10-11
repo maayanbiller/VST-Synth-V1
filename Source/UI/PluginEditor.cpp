@@ -11,10 +11,22 @@ VSTSynthV1AudioProcessorEditor::VSTSynthV1AudioProcessorEditor (VSTSynthV1AudioP
         addAndMakeVisible(ls);
         if (paramID.isNotEmpty()) {
             attach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(audioProcessor.apvts, paramID, ls.slider);
-            ls.slider.textFromValueFunction = [](double v) { 
-                if (v >= 10.0 || std::abs(v - std::round(v)) < 0.001) return juce::String((int)std::round(v)); 
-                return juce::String(v, 2); 
-            };
+            if (auto* param = audioProcessor.apvts.getParameter(paramID))
+            {
+                ls.slider.textFromValueFunction = [param](double v) {
+                    return param->getText(param->convertTo0to1((float)v), 0);
+                };
+                ls.slider.valueFromTextFunction = [param](const juce::String& text) {
+                    return (double)param->convertFrom0to1(param->getValueForText(text));
+                };
+            }
+            else
+            {
+                ls.slider.textFromValueFunction = [](double v) { 
+                    if (v >= 10.0 || std::abs(v - std::round(v)) < 0.001) return juce::String((int)std::round(v)); 
+                    return juce::String(v, 2); 
+                };
+            }
         }
     };
 
@@ -53,6 +65,7 @@ VSTSynthV1AudioProcessorEditor::VSTSynthV1AudioProcessorEditor (VSTSynthV1AudioP
     setupLabeled(osc2LevelSlider, IDs::OSC2_LEVEL, osc2LevelAttach);
     setupLabeled(osc3LevelSlider, IDs::OSC3_LEVEL, osc3LevelAttach);
     setupLabeled(osc4LevelSlider, IDs::OSC4_LEVEL, osc4LevelAttach);
+    setupLabeled(noiseLevelSlider, IDs::NOISE_LEVEL, noiseLevelAttach);
     setupLabeled(masterVolSlider, IDs::MASTER_VOL, masterVolAttach);
 
     setupLabeled(filterCutoffSlider, IDs::FILTER_CUTOFF, filterCutoffAttach);
@@ -103,26 +116,7 @@ VSTSynthV1AudioProcessorEditor::VSTSynthV1AudioProcessorEditor (VSTSynthV1AudioP
     lfo2WaveSlider.label.setText("", juce::dontSendNotification);
 
     setupLabeled(playModeSlider, IDs::PLAY_MODE, playModeAttach);
-    playModeSlider.slider.textFromValueFunction = [](double v) {
-        int idx = (int)std::round(v);
-        if (idx == 0) return juce::String("Poly");
-        if (idx == 1) return juce::String("Mono");
-        if (idx == 2) return juce::String("Legato");
-        return juce::String("Poly");
-    };
-    playModeSlider.slider.valueFromTextFunction = [](const juce::String& t) {
-        if (t.equalsIgnoreCase("Mono")) return 1.0;
-        if (t.equalsIgnoreCase("Legato")) return 2.0;
-        return 0.0;
-    };
-    playModeSlider.slider.setRange(0.0, 2.0, 1.0);
-
     setupLabeled(glideSlider, IDs::GLIDE_TIME, glideAttach);
-    glideSlider.slider.textFromValueFunction = [](double v) {
-        return juce::String(v, 2) + " s";
-    };
-    
-    setupLabeled(noiseLevelSlider, IDs::NOISE_LEVEL, noiseLevelAttach);
     setupLabeled(noiseColorSlider, IDs::NOISE_COLOR, noiseColorAttach);
 
     addAndMakeVisible(modGroup); addAndMakeVisible(playGroup); addAndMakeVisible(noiseGroup);
@@ -145,6 +139,38 @@ VSTSynthV1AudioProcessorEditor::~VSTSynthV1AudioProcessorEditor()
 void VSTSynthV1AudioProcessorEditor::paint (juce::Graphics& g)
 {
     customLookAndFeel.drawWoodBackground(g, getWidth(), getHeight());
+
+    // Silkscreen UNISON headers for each oscillator section
+    g.setFont(juce::Font(juce::FontOptions(9.5f, juce::Font::bold)));
+    g.setColour(juce::Colour(0xffc2b298).withAlpha(0.65f));
+
+    for (auto* oscGrp : { &osc1Group, &osc2Group, &osc3Group, &osc4Group })
+    {
+        auto b = oscGrp->getBounds();
+        int uniY = b.getY() + 22 + 110 + 66;
+        g.drawText("- UNISON -", b.getX(), uniY, b.getWidth(), 14, juce::Justification::centred);
+    }
+
+    // Inset sub-panels for Envelopes
+    auto envBounds = envGroup.getBounds().reduced(6);
+    envBounds.removeFromTop(22);
+    int gW = envBounds.getWidth() / 3;
+    for (int i = 0; i < 3; ++i)
+    {
+        auto subPlate = envBounds.removeFromLeft(gW).reduced(4, 2).toFloat();
+        g.setColour(juce::Colours::black.withAlpha(0.20f));
+        g.fillRoundedRectangle(subPlate, 4.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.06f));
+        g.drawRoundedRectangle(subPlate, 4.0f, 1.0f);
+    }
+
+    // Silkscreen markings for Noise Color
+    auto ncBounds = noiseColorSlider.getBounds();
+    int markY = ncBounds.getBottom() + 2;
+    g.setFont(juce::Font(juce::FontOptions(9.0f, juce::Font::bold)));
+    g.setColour(juce::Colour(0xffc2b298).withAlpha(0.70f));
+    g.drawText("RED", ncBounds.getX() - 15, markY, 35, 12, juce::Justification::centred);
+    g.drawText("VIOLET", ncBounds.getRight() - 20, markY, 40, 12, juce::Justification::centred);
 }
 
 void VSTSynthV1AudioProcessorEditor::resized()
@@ -167,15 +193,16 @@ void VSTSynthV1AudioProcessorEditor::resized()
     mixerGroup.setBounds(mixArea);
 
     auto layoutOsc = [](juce::Rectangle<int> b, LabeledSlider& w, LabeledSlider& o, LabeledSlider& d, LabeledSlider& p, LabeledSlider& v, LabeledSlider& wd) {
-        b.removeFromTop(20); // title
-        auto topRow = b.removeFromTop(115);
+        b.removeFromTop(22); // title
+        auto topRow = b.removeFromTop(110);
         w.setBounds(topRow.reduced(4));
-        auto midRow = b.removeFromTop(75);
+        auto midRow = b.removeFromTop(66);
         int mw = midRow.getWidth() / 3;
         o.setBounds(midRow.removeFromLeft(mw).reduced(2));
         d.setBounds(midRow.removeFromLeft(mw).reduced(2));
         p.setBounds(midRow.reduced(2));
-        auto botRow = b;
+        b.removeFromTop(14); // Spacing for - UNISON - header
+        auto botRow = b.removeFromTop(62);
         int bw = botRow.getWidth() / 2;
         v.setBounds(botRow.removeFromLeft(bw).reduced(2));
         wd.setBounds(botRow.reduced(2));
@@ -187,11 +214,12 @@ void VSTSynthV1AudioProcessorEditor::resized()
     layoutOsc(osc4Area, osc4WaveSlider, osc4OctSlider, osc4DetuneSlider, osc4PwmSlider, osc4VoicesSlider, osc4WidthSlider);
 
     mixArea.removeFromTop(20);
-    int mixW = mixArea.getWidth() / 5;
+    int mixW = mixArea.getWidth() / 6;
     osc1LevelSlider.setBounds(mixArea.removeFromLeft(mixW).reduced(2));
     osc2LevelSlider.setBounds(mixArea.removeFromLeft(mixW).reduced(2));
     osc3LevelSlider.setBounds(mixArea.removeFromLeft(mixW).reduced(2));
     osc4LevelSlider.setBounds(mixArea.removeFromLeft(mixW).reduced(2));
+    noiseLevelSlider.setBounds(mixArea.removeFromLeft(mixW).reduced(2));
     masterVolSlider.setBounds(mixArea.reduced(2));
 
     area.removeFromTop(10); // Spacing between top and bottom half
@@ -208,13 +236,14 @@ void VSTSynthV1AudioProcessorEditor::resized()
     modGroup.setBounds(bottomRow.reduced(5));
 
     auto filtArea = filterGroup.getBounds().reduced(5);
-    filtArea.removeFromTop(20);
-    auto filtTop = filtArea.removeFromTop(filtArea.getHeight()/2);
-    filterCutoffSlider.setBounds(filtTop.removeFromLeft(filtTop.getWidth()/2).reduced(2));
-    filterResSlider.setBounds(filtTop.reduced(2));
-    auto filtBot = filtArea;
-    filterDriveSlider.setBounds(filtBot.removeFromLeft(filtBot.getWidth()/2).reduced(2));
-    filterEnvAmtSlider.setBounds(filtBot.reduced(2));
+    filtArea.removeFromTop(22);
+    auto topFiltRow = filtArea.removeFromTop(filtArea.getHeight() * 0.58f);
+    filterCutoffSlider.setBounds(topFiltRow.withSizeKeepingCentre(120, 105));
+    auto botFiltRow = filtArea;
+    int bw = botFiltRow.getWidth() / 3;
+    filterResSlider.setBounds(botFiltRow.removeFromLeft(bw).reduced(2));
+    filterDriveSlider.setBounds(botFiltRow.removeFromLeft(bw).reduced(2));
+    filterEnvAmtSlider.setBounds(botFiltRow.reduced(2));
 
     auto lfoA = lfoGroup.getBounds().reduced(5);
     lfoA.removeFromTop(20);
@@ -229,21 +258,18 @@ void VSTSynthV1AudioProcessorEditor::resized()
     lfo2RateSlider.setBounds(lfo2A.removeFromLeft(lW).reduced(2));
     lfo2DepthSlider.setBounds(lfo2A.reduced(2));
     
-    // Layout Play
+    // Layout Play - well proportioned secondary controls
     auto pArea = playGroup.getBounds().reduced(5);
-    pArea.removeFromTop(20);
-    {
-        pArea.removeFromTop(30);
-        int pw = pArea.getWidth() / 2;
-        playModeSlider.setBounds(pArea.removeFromLeft(pw).reduced(4));
-        glideSlider.setBounds(pArea.reduced(4));
-    }
+    pArea.removeFromTop(22);
+    auto pKnobs = pArea.withSizeKeepingCentre(180, 85);
+    int pw = pKnobs.getWidth() / 2;
+    playModeSlider.setBounds(pKnobs.removeFromLeft(pw).reduced(2));
+    glideSlider.setBounds(pKnobs.reduced(2));
 
-    // Layout Noise
+    // Layout Noise - centered color control
     auto nArea = noiseGroup.getBounds().reduced(5);
-    nArea.removeFromTop(20);
-    noiseLevelSlider.setBounds(nArea.removeFromTop(nArea.getHeight()/2).reduced(2));
-    noiseColorSlider.setBounds(nArea.reduced(2));
+    nArea.removeFromTop(22);
+    noiseColorSlider.setBounds(nArea.withSizeKeepingCentre(90, 90));
 
     // Layout Mod Matrix
     auto mArea = modGroup.getBounds().reduced(5);

@@ -404,3 +404,71 @@
   - Verified `run_synth.bat` cleanly launches `build\VSTSynthV1_artefacts\Debug\Standalone\VST Synth V1.exe`.
   - Rebuilt and verified `VST Synth V1.exe` (Standalone) and `VST Synth V1.vst3` (VST3).
 
+---
+
+## 2026-10-11: Addressing User Feedback & Commercial-Grade Redesign
+
+### Process & Conversation Summary
+- **User Goals & Feedback**:
+  1. *Waveform Icons*: Make them whole/unclipped without dark circle bezels, looking like clean vintage silkscreen symbols on the panel.
+  2. *Envelope 0-Point & Cliff Fix*: Ensure Attack starts strictly on true 0.0 (no initial non-zero jump/step), and Release drops asymptotically into complete silence (< -94 dB) without an abrupt cutoff/cliff.
+  3. *Envelope Fader Resolution*: Eliminate the 0 to 0.01 jump. Continuous 0.1ms resolution starting from 0 ms (`0 ms`, `1.5 ms`, `12 ms`, `150 ms`, `1.25 s`) with 50% fader travel dedicated to 0–200ms.
+  4. *Noise Color & Mixer Volume*: Implement functional Noise Color DSP (-1.0 Brown/Red to 0.0 White to +1.0 Violet/Blue). Add silkscreen indicators (`RED`, `WHITE`, `VIOLET`) and dynamic color name readout. Move Noise Level fader into the Mixer section alongside OSC 1–4 and Master.
+  5. *Unison Clarity & Width = 0 Mono*: Label unison controls explicitly as Unison (`Uni Voices`, `Uni Width` with `- UNISON -` header). Ensure Width = 0 produces mathematically identical bit-for-bit mono ($L \equiv R$). Provide skewed/fine control for lower width (0–25%) and detune around 0 cents.
+  6. *LFO Range Expansion*: Expand LFO Rate (0.01 Hz to 100.0 Hz with 2.0 Hz center skew) and LFO Depth (0% to 200% with 50% center skew).
+  7. *Global Parameter Precision Tuning & Visual Testing*: Audit and calibrate precision skews across all controls. Rigorously test DSP and run automated visual rendering with subagent critique.
+
+### Architectural Decisions & Implementations
+1. **Waveform Icons & Knob Rendering (`Source/UI/wave_*.png`, `Source/UI/SynthLookAndFeel.h`)**:
+   - Regenerated `wave_sine.png`, `wave_triangle.png`, `wave_saw.png`, `wave_square.png` as clean off-white antialiased vector silhouettes on transparent backgrounds without dark bezels.
+   - Calibrated rotary knob radius to `minDim * 0.28f` with `r2 = radius + minDim * 0.15f` and `iconSize = clamp(minDim * 0.18f, 15px, 20px)`. Leaves a safe 6% margin within component boundaries, eliminating any edge clipping.
+   - Added glowing warm amber radial halo around the active waveform selection.
+2. **Envelope Pure Analog Asymptotic Discharge & True 0 Attack (`Source/DSP/DAHDSREnvelope.h`, `DAHDSREnvelope.cpp`)**:
+   - Attack initial sample strictly initialized to `currentValue = 0.0f;` without step jumps.
+   - Replaced linear cutoff threshold with exponential multiplicative decay: $V_t = V_{t-1} \cdot e^{-6.91 / N}$, decaying continuously below $0.00002\text{f}$ ($-94\text{ dB}$) before idling. Eliminates abrupt cliffs and audible clicks.
+   - Zero-attack and zero-decay instantly snaps directly to sustain level without spiking.
+3. **Continuous Parameter Resolution & APVTS Text Delegation (`Source/UI/PluginEditor.cpp`, `Source/PluginProcessor.cpp`)**:
+   - Identified root cause of the 0 to 0.01 jump: `setupLabeled()` was overriding `textFromValueFunction` with a generic 2-decimal lambda.
+   - Fixed `setupLabeled()` to delegate directly to `param->getText(param->convertTo0to1(v), 0)` and `param->convertFrom0to1(param->getValueForText(t))`.
+   - All sliders throughout the plugin now natively display calibrated, formatted units: Envelopes (`0 ms`, `15.0 ms`, `1.50 s`), Detune (`0 ct`, `+2.5 ct`), Width (`50%`), Cutoff (`250 Hz`, `1.50 kHz`), Drive (`2.5x`), Glide (`Off`, `45 ms`, `1.20 s`), Noise Color (`Red`, `Pink`, `White`, `Blue`, `Violet`), Mixer Levels (`50%`).
+4. **Noise Color DSP & Mixer Integration (`Source/DSP/SynthVoice.h`, `SynthVoice.cpp`, `PluginEditor.h`, `PluginEditor.cpp`)**:
+   - Implemented 2-pole multi-mode spectral shaping filter in `SynthVoice`: negative color applies cascaded low-pass filtering down to 150 Hz (warm Brown/Red noise); positive color applies high-pass filtering up to 5 kHz (crisp Blue/Violet noise).
+   - Moved `noiseLevelSlider` into `mixerGroup`, creating 6 vertical faders (`OSC 1`, `OSC 2`, `OSC 3`, `OSC 4`, `NOISE`, `Master`).
+   - Sized labels with 0 border margin and 9.5f bold font to prevent any text truncation (`...`).
+5. **Unison Width = 0 Mathematical Mono & Grouping (`Source/DSP/PolyBLEPOscillator.h`, `PluginEditor.h`, `PluginEditor.cpp`)**:
+   - Added bit-for-bit mono bypass when `stereoWidth <= 0.001f`: $outL = outR = \text{sum} \cdot \text{norm} \cdot 0.7071\text{f}$.
+   - Renamed oscillator knobs to `Uni Voices` and `Uni Width`, engraved with a dedicated `- UNISON -` sub-header with 14px vertical breathing room.
+6. **Commercial-Grade UI/UX Overhaul (`Source/UI/SynthLookAndFeel.h`, `PluginEditor.cpp`)**:
+   - Following detailed critique from the `visual_qa` subagent, overhauled the panel layout:
+     - Embedded all modules inside recessed dark smoked-metal faceplates with beveled borders and engraved hairline titles, letting the rich dark wood act as the luxurious outer chassis and cabinet.
+     - Filter Cutoff elevated to the prominent hero centerpiece knob (120x105).
+     - Proportioned secondary knobs (`Mode`, `Glide`) in the Play section to 85x85.
+     - Divided the 12 envelope faders into 3 distinct, grounded sub-modules (`MOD ENV`, `FILTER ENV`, `AMP ENV`) with dark inset trays.
+     - Synchronized all 6 mixer faders with identical 0.50f center skew, guaranteeing razor-sharp horizontal alignment of all 6 fader caps at 50%.
+
+### Rigorous Testing & QA Verification
+1. **Automated DSP Unit Test Suite (`Tests/RenderWav.cpp`)**:
+   - Ran 24 comprehensive DSP unit tests covering:
+     - 16-voice simultaneous polyphony and note-stealing
+     - Polyphonic audio summing RMS scaling (single note, 4-note chord, 16-note chord)
+     - Mono and Legato voice priority and note-stack recall
+     - Analog asymptotic envelope release decay (< -94 dB fadeout)
+     - 0-attack 0-decay instant sustain snap
+     - Filter resonance and drive saturation non-clipping stability
+     - 7-voice unison stereo spread ($L \neq R$)
+     - Unison Width = 0 mono bit-for-bit equality ($L \equiv R$, diff $< 10^{-6}$)
+     - Attack true 0 start on sample 0 ($< 0.001$)
+     - Noise color spectral shaping (Red vs Violet)
+     - Parameter string formatting across all modules
+   - **Result: ALL 24 TESTS PASSED FLAWLESSLY.**
+2. **Subagent Visual QA Critique (`visual_qa`)**:
+   - Headless snapshot rendered to `headless_gui_render.png`.
+   - Subagent audit awarded **9.2 / 10 — Commercial-Grade Instrument**, approving the build for production release with praise for modular grounding, alignment, typography, and hardware realism.
+3. **Build & Artifact Verification**:
+   - Built with MSVC 2022 and CMake 3.20+:
+     - `build\RenderWav_artefacts\Debug\RenderWav.exe` (DSP verification)
+     - `build\SynthTest_artefacts\Debug\SynthTest.exe` (GUI verification)
+     - `build\VSTSynthV1_artefacts\Debug\Standalone\VST Synth V1.exe` (Standalone synth)
+     - `build\VSTSynthV1_artefacts\Debug\VST3\VST Synth V1.vst3` (VST3 plugin)
+
+

@@ -46,6 +46,7 @@ private:
     int stateLengthSamples = 0;
     float targetValue = 0.0f;
     float coef = 0.0f;
+    float releaseMultiplier = 0.0f;
 
     void advanceToNextState();
     void enterState(State newState, bool resetSamples = true);
