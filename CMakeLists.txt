@@ -108,5 +108,45 @@ target_link_libraries(RenderWav PRIVATE juce::juce_audio_utils juce::juce_audio_
 target_compile_definitions(RenderWav PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 juce_generate_juce_header(RenderWav)
 
+juce_add_console_app(RecordAmplitude)
+target_sources(RecordAmplitude PRIVATE Tests/RecordAmplitude.cpp Source/PluginProcessor.cpp Source/DSP/DAHDSREnvelope.cpp Source/DSP/SynthVoice.cpp Source/UI/PluginEditor.cpp)
+target_link_libraries(RecordAmplitude PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_dsp juce::juce_gui_basics juce::juce_gui_extra SynthAssets)
+target_compile_definitions(RecordAmplitude PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+juce_generate_juce_header(RecordAmplitude)
+
+juce_add_console_app(StressTest)
+target_sources(StressTest PRIVATE Tests/StressReproductionTest.cpp Source/PluginProcessor.cpp Source/DSP/DAHDSREnvelope.cpp Source/DSP/SynthVoice.cpp Source/UI/PluginEditor.cpp)
+target_link_libraries(StressTest PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_dsp juce::juce_gui_basics juce::juce_gui_extra SynthAssets)
+target_compile_definitions(StressTest PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+juce_generate_juce_header(StressTest)
+
+juce_add_console_app(DeviceStressTest)
+target_sources(DeviceStressTest PRIVATE Tests/DeviceStressTest.cpp Source/PluginProcessor.cpp Source/DSP/DAHDSREnvelope.cpp Source/DSP/SynthVoice.cpp Source/UI/PluginEditor.cpp)
+target_link_libraries(DeviceStressTest PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_audio_devices juce::juce_dsp juce::juce_gui_basics juce::juce_gui_extra SynthAssets)
+target_compile_definitions(DeviceStressTest PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+juce_generate_juce_header(DeviceStressTest)
+
+juce_add_console_app(ProfileCPU)
+target_sources(ProfileCPU PRIVATE Tests/ProfileCPU.cpp Source/PluginProcessor.cpp Source/DSP/DAHDSREnvelope.cpp Source/DSP/SynthVoice.cpp Source/UI/PluginEditor.cpp)
+target_link_libraries(ProfileCPU PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_dsp juce::juce_gui_basics juce::juce_gui_extra SynthAssets)
+target_compile_definitions(ProfileCPU PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+juce_generate_juce_header(ProfileCPU)
+
+juce_add_console_app(EditorDeviceStressTest)
+target_sources(EditorDeviceStressTest PRIVATE Tests/EditorDeviceStressTest.cpp Source/PluginProcessor.cpp Source/DSP/DAHDSREnvelope.cpp Source/DSP/SynthVoice.cpp Source/UI/PluginEditor.cpp)
+target_link_libraries(EditorDeviceStressTest PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_audio_devices juce::juce_dsp juce::juce_gui_basics juce::juce_gui_extra SynthAssets)
+target_compile_definitions(EditorDeviceStressTest PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
+juce_generate_juce_header(EditorDeviceStressTest)
+
+juce_add_console_app(UltraLowLatencyStressTest)
+target_sources(UltraLowLatencyStressTest PRIVATE Tests/UltraLowLatencyStressTest.cpp Source/PluginProcessor.cpp Source/DSP/DAHDSREnvelope.cpp Source/DSP/SynthVoice.cpp Source/UI/PluginEditor.cpp)
+target_link_libraries(UltraLowLatencyStressTest PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_dsp juce::juce_gui_basics juce::juce_gui_extra SynthAssets)
+target_compile_definitions(UltraLowLatencyStressTest PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+juce_generate_juce_header(UltraLowLatencyStressTest)
+
+
+
+
+
 
 

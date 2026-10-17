@@ -14,7 +14,10 @@ public:
         float velocity;
     };
 
-    SynthEngine() = default;
+    SynthEngine()
+    {
+        heldNotes.reserve(128);
+    }
 
     void setPlayMode (int mode)
     {
@@ -88,8 +91,10 @@ public:
         auto it = std::find_if (heldNotes.begin(), heldNotes.end(), [midiNoteNumber](const HeldNote& n) {
             return n.noteNumber == midiNoteNumber;
         });
-        if (it != heldNotes.end())
-            heldNotes.erase (it);
+        if (it == heldNotes.end())
+            return; // Note was not held in stack, ignore
+
+        heldNotes.erase (it);
 
         if (voices.isEmpty()) return;
         auto* voice = dynamic_cast<SynthVoice*> (voices.getUnchecked (0));

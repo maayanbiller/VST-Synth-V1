@@ -12,11 +12,108 @@ VSTSynthV1AudioProcessor::VSTSynthV1AudioProcessor()
     synth.addSound(new SynthSound());
     for (int i = 0; i < 16; ++i) // 16 voices
     {
-        synth.addVoice(new SynthVoice());
+        auto* v = new SynthVoice();
+        synth.addVoice(v);
+        cachedVoicePointers.push_back(v);
     }
     synth.setNoteStealingEnabled(true);
 
-    masterVol = apvts.getRawParameterValue(IDs::MASTER_VOL);
+    cachedParams.masterVol = apvts.getRawParameterValue(IDs::MASTER_VOL);
+    cachedParams.noiseLevel = apvts.getRawParameterValue(IDs::NOISE_LEVEL);
+    cachedParams.noiseColor = apvts.getRawParameterValue(IDs::NOISE_COLOR);
+    cachedParams.playMode = apvts.getRawParameterValue(IDs::PLAY_MODE);
+    cachedParams.glideTime = apvts.getRawParameterValue(IDs::GLIDE_TIME);
+
+    cachedParams.oscWave[0] = apvts.getRawParameterValue(IDs::OSC1_WAVE);
+    cachedParams.oscOct[0] = apvts.getRawParameterValue(IDs::OSC1_OCTAVE);
+    cachedParams.oscDetune[0] = apvts.getRawParameterValue(IDs::OSC1_DETUNE);
+    cachedParams.oscLevel[0] = apvts.getRawParameterValue(IDs::OSC1_LEVEL);
+    cachedParams.oscPwm[0] = apvts.getRawParameterValue(IDs::OSC1_PWM);
+    cachedParams.oscVoices[0] = apvts.getRawParameterValue(IDs::OSC1_VOICES);
+    cachedParams.oscWidth[0] = apvts.getRawParameterValue(IDs::OSC1_WIDTH);
+
+    cachedParams.oscWave[1] = apvts.getRawParameterValue(IDs::OSC2_WAVE);
+    cachedParams.oscOct[1] = apvts.getRawParameterValue(IDs::OSC2_OCTAVE);
+    cachedParams.oscDetune[1] = apvts.getRawParameterValue(IDs::OSC2_DETUNE);
+    cachedParams.oscLevel[1] = apvts.getRawParameterValue(IDs::OSC2_LEVEL);
+    cachedParams.oscPwm[1] = apvts.getRawParameterValue(IDs::OSC2_PWM);
+    cachedParams.oscVoices[1] = apvts.getRawParameterValue(IDs::OSC2_VOICES);
+    cachedParams.oscWidth[1] = apvts.getRawParameterValue(IDs::OSC2_WIDTH);
+
+    cachedParams.oscWave[2] = apvts.getRawParameterValue(IDs::OSC3_WAVE);
+    cachedParams.oscOct[2] = apvts.getRawParameterValue(IDs::OSC3_OCTAVE);
+    cachedParams.oscDetune[2] = apvts.getRawParameterValue(IDs::OSC3_DETUNE);
+    cachedParams.oscLevel[2] = apvts.getRawParameterValue(IDs::OSC3_LEVEL);
+    cachedParams.oscPwm[2] = apvts.getRawParameterValue(IDs::OSC3_PWM);
+    cachedParams.oscVoices[2] = apvts.getRawParameterValue(IDs::OSC3_VOICES);
+    cachedParams.oscWidth[2] = apvts.getRawParameterValue(IDs::OSC3_WIDTH);
+
+    cachedParams.oscWave[3] = apvts.getRawParameterValue(IDs::OSC4_WAVE);
+    cachedParams.oscOct[3] = apvts.getRawParameterValue(IDs::OSC4_OCTAVE);
+    cachedParams.oscDetune[3] = apvts.getRawParameterValue(IDs::OSC4_DETUNE);
+    cachedParams.oscLevel[3] = apvts.getRawParameterValue(IDs::OSC4_LEVEL);
+    cachedParams.oscPwm[3] = apvts.getRawParameterValue(IDs::OSC4_PWM);
+    cachedParams.oscVoices[3] = apvts.getRawParameterValue(IDs::OSC4_VOICES);
+    cachedParams.oscWidth[3] = apvts.getRawParameterValue(IDs::OSC4_WIDTH);
+
+    cachedParams.filterType = apvts.getRawParameterValue(IDs::FILTER_TYPE);
+    cachedParams.filterCutoff = apvts.getRawParameterValue(IDs::FILTER_CUTOFF);
+    cachedParams.filterRes = apvts.getRawParameterValue(IDs::FILTER_RES);
+    cachedParams.filterDrive = apvts.getRawParameterValue(IDs::FILTER_DRIVE);
+    cachedParams.filterEnvAmt = apvts.getRawParameterValue(IDs::FILTER_ENV_AMT);
+    cachedParams.filterKeyTrack = apvts.getRawParameterValue(IDs::FILTER_KEYTRACK);
+
+    cachedParams.ampAttack = apvts.getRawParameterValue(IDs::AMP_ATTACK);
+    cachedParams.ampDecay = apvts.getRawParameterValue(IDs::AMP_DECAY);
+    cachedParams.ampSustain = apvts.getRawParameterValue(IDs::AMP_SUSTAIN);
+    cachedParams.ampRelease = apvts.getRawParameterValue(IDs::AMP_RELEASE);
+
+    cachedParams.filtAttack = apvts.getRawParameterValue(IDs::FILT_ATTACK);
+    cachedParams.filtDecay = apvts.getRawParameterValue(IDs::FILT_DECAY);
+    cachedParams.filtSustain = apvts.getRawParameterValue(IDs::FILT_SUSTAIN);
+    cachedParams.filtRelease = apvts.getRawParameterValue(IDs::FILT_RELEASE);
+
+    cachedParams.modAttack = apvts.getRawParameterValue(IDs::MOD_ATTACK);
+    cachedParams.modDecay = apvts.getRawParameterValue(IDs::MOD_DECAY);
+    cachedParams.modSustain = apvts.getRawParameterValue(IDs::MOD_SUSTAIN);
+    cachedParams.modRelease = apvts.getRawParameterValue(IDs::MOD_RELEASE);
+
+    cachedParams.lfoWave[0] = apvts.getRawParameterValue(IDs::LFO1_WAVE);
+    cachedParams.lfoRate[0] = apvts.getRawParameterValue(IDs::LFO1_RATE);
+    cachedParams.lfoDepth[0] = apvts.getRawParameterValue(IDs::LFO1_DEPTH);
+
+    cachedParams.lfoWave[1] = apvts.getRawParameterValue(IDs::LFO2_WAVE);
+    cachedParams.lfoRate[1] = apvts.getRawParameterValue(IDs::LFO2_RATE);
+    cachedParams.lfoDepth[1] = apvts.getRawParameterValue(IDs::LFO2_DEPTH);
+
+    cachedParams.modBusAmts[0] = apvts.getRawParameterValue(IDs::MOD_BUS_1_AMT);
+    cachedParams.modBusAmts[1] = apvts.getRawParameterValue(IDs::MOD_BUS_2_AMT);
+    cachedParams.modBusAmts[2] = apvts.getRawParameterValue(IDs::MOD_BUS_3_AMT);
+    cachedParams.modBusAmts[3] = apvts.getRawParameterValue(IDs::MOD_BUS_4_AMT);
+
+    for (int r = 0; r < 5; ++r)
+    {
+        for (int c = 0; c < 8; ++c)
+        {
+            cachedParams.modMatrix[r][c] = apvts.getRawParameterValue(IDs::getModCellId(r, c));
+        }
+    }
+
+    cachedParams.modSrc[0] = apvts.getRawParameterValue(IDs::MOD_SRC_1);
+    cachedParams.modDst[0] = apvts.getRawParameterValue(IDs::MOD_DST_1);
+    cachedParams.modAmts[0] = apvts.getRawParameterValue(IDs::MOD_AMT_1);
+
+    cachedParams.modSrc[1] = apvts.getRawParameterValue(IDs::MOD_SRC_2);
+    cachedParams.modDst[1] = apvts.getRawParameterValue(IDs::MOD_DST_2);
+    cachedParams.modAmts[1] = apvts.getRawParameterValue(IDs::MOD_AMT_2);
+
+    cachedParams.modSrc[2] = apvts.getRawParameterValue(IDs::MOD_SRC_3);
+    cachedParams.modDst[2] = apvts.getRawParameterValue(IDs::MOD_DST_3);
+    cachedParams.modAmts[2] = apvts.getRawParameterValue(IDs::MOD_AMT_3);
+
+    cachedParams.modSrc[3] = apvts.getRawParameterValue(IDs::MOD_SRC_4);
+    cachedParams.modDst[3] = apvts.getRawParameterValue(IDs::MOD_DST_4);
+    cachedParams.modAmts[3] = apvts.getRawParameterValue(IDs::MOD_AMT_4);
 }
 
 VSTSynthV1AudioProcessor::~VSTSynthV1AudioProcessor()
@@ -291,6 +388,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout VSTSynthV1AudioProcessor::cr
 void VSTSynthV1AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     synth.setCurrentPlaybackSampleRate(sampleRate);
+    dcBlockerL.prepare(sampleRate);
+    dcBlockerR.prepare(sampleRate);
     for (int i = 0; i < synth.getNumVoices(); ++i)
     {
         if (auto voice = dynamic_cast<SynthVoice*>(synth.getVoice(i)))
@@ -322,135 +421,156 @@ void VSTSynthV1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
+    buffer.clear();
 
-    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear (i, 0, buffer.getNumSamples());
-
-    // Pull parameters
-    float mVol = masterVol->load();
+    // Pull parameters atomically (zero heap allocations, zero mutex locks)
+    float mVol = cachedParams.masterVol ? cachedParams.masterVol->load() : 0.7f;
 
     DAHDSREnvelope::Parameters ampParams { 
-        0.0f, apvts.getRawParameterValue(IDs::AMP_ATTACK)->load(), 0.0f,
-        apvts.getRawParameterValue(IDs::AMP_DECAY)->load(), apvts.getRawParameterValue(IDs::AMP_SUSTAIN)->load(),
-        apvts.getRawParameterValue(IDs::AMP_RELEASE)->load()
+        0.0f,
+        cachedParams.ampAttack ? cachedParams.ampAttack->load() : 0.05f,
+        0.0f,
+        cachedParams.ampDecay ? cachedParams.ampDecay->load() : 0.2f,
+        cachedParams.ampSustain ? cachedParams.ampSustain->load() : 1.0f,
+        cachedParams.ampRelease ? cachedParams.ampRelease->load() : 0.2f
     };
     
     DAHDSREnvelope::Parameters filtParams { 
-        0.0f, apvts.getRawParameterValue(IDs::FILT_ATTACK)->load(), 0.0f,
-        apvts.getRawParameterValue(IDs::FILT_DECAY)->load(), apvts.getRawParameterValue(IDs::FILT_SUSTAIN)->load(),
-        apvts.getRawParameterValue(IDs::FILT_RELEASE)->load()
+        0.0f,
+        cachedParams.filtAttack ? cachedParams.filtAttack->load() : 0.05f,
+        0.0f,
+        cachedParams.filtDecay ? cachedParams.filtDecay->load() : 0.2f,
+        cachedParams.filtSustain ? cachedParams.filtSustain->load() : 1.0f,
+        cachedParams.filtRelease ? cachedParams.filtRelease->load() : 0.2f
     };
     
     DAHDSREnvelope::Parameters modParams { 
-        0.0f, apvts.getRawParameterValue(IDs::MOD_ATTACK)->load(), 0.0f,
-        apvts.getRawParameterValue(IDs::MOD_DECAY)->load(), apvts.getRawParameterValue(IDs::MOD_SUSTAIN)->load(),
-        apvts.getRawParameterValue(IDs::MOD_RELEASE)->load()
+        0.0f,
+        cachedParams.modAttack ? cachedParams.modAttack->load() : 0.05f,
+        0.0f,
+        cachedParams.modDecay ? cachedParams.modDecay->load() : 0.2f,
+        cachedParams.modSustain ? cachedParams.modSustain->load() : 1.0f,
+        cachedParams.modRelease ? cachedParams.modRelease->load() : 0.2f
     };
 
     GlobalSynthParams params;
-    params.oscOct[0] = apvts.getRawParameterValue(IDs::OSC1_OCTAVE)->load();
-    params.oscDetune[0] = apvts.getRawParameterValue(IDs::OSC1_DETUNE)->load();
-    params.oscLevel[0] = apvts.getRawParameterValue(IDs::OSC1_LEVEL)->load();
-    params.oscPwm[0] = apvts.getRawParameterValue(IDs::OSC1_PWM)->load();
-    params.oscWave[0] = static_cast<int>(apvts.getRawParameterValue(IDs::OSC1_WAVE)->load());
+    for (int i = 0; i < 4; ++i)
+    {
+        params.oscOct[i]    = cachedParams.oscOct[i]    ? cachedParams.oscOct[i]->load() : 0.0f;
+        params.oscDetune[i] = cachedParams.oscDetune[i] ? cachedParams.oscDetune[i]->load() : 0.0f;
+        params.oscLevel[i]  = cachedParams.oscLevel[i]  ? cachedParams.oscLevel[i]->load() : (i == 0 ? 1.0f : 0.0f);
+        params.oscPwm[i]    = cachedParams.oscPwm[i]    ? cachedParams.oscPwm[i]->load() : 0.5f;
+        params.oscWave[i]   = cachedParams.oscWave[i]   ? static_cast<int>(cachedParams.oscWave[i]->load()) : 2;
+        params.oscVoices[i] = cachedParams.oscVoices[i] ? static_cast<int>(cachedParams.oscVoices[i]->load()) : 1;
+        params.oscWidth[i]  = cachedParams.oscWidth[i]  ? cachedParams.oscWidth[i]->load() : 0.5f;
+    }
 
-    params.oscOct[1] = apvts.getRawParameterValue(IDs::OSC2_OCTAVE)->load();
-    params.oscDetune[1] = apvts.getRawParameterValue(IDs::OSC2_DETUNE)->load();
-    params.oscLevel[1] = apvts.getRawParameterValue(IDs::OSC2_LEVEL)->load();
-    params.oscPwm[1] = apvts.getRawParameterValue(IDs::OSC2_PWM)->load();
-    params.oscWave[1] = static_cast<int>(apvts.getRawParameterValue(IDs::OSC2_WAVE)->load());
-
-    params.oscOct[2] = apvts.getRawParameterValue(IDs::OSC3_OCTAVE)->load();
-    params.oscDetune[2] = apvts.getRawParameterValue(IDs::OSC3_DETUNE)->load();
-    params.oscLevel[2] = apvts.getRawParameterValue(IDs::OSC3_LEVEL)->load();
-    params.oscPwm[2] = apvts.getRawParameterValue(IDs::OSC3_PWM)->load();
-    params.oscWave[2] = static_cast<int>(apvts.getRawParameterValue(IDs::OSC3_WAVE)->load());
-
-    params.oscOct[3] = apvts.getRawParameterValue(IDs::OSC4_OCTAVE)->load();
-    params.oscDetune[3] = apvts.getRawParameterValue(IDs::OSC4_DETUNE)->load();
-    params.oscLevel[3] = apvts.getRawParameterValue(IDs::OSC4_LEVEL)->load();
-    params.oscPwm[3] = apvts.getRawParameterValue(IDs::OSC4_PWM)->load();
-    params.oscWave[3] = static_cast<int>(apvts.getRawParameterValue(IDs::OSC4_WAVE)->load());
-
-    params.oscVoices[0] = static_cast<int>(apvts.getRawParameterValue(IDs::OSC1_VOICES)->load());
-    params.oscWidth[0] = apvts.getRawParameterValue(IDs::OSC1_WIDTH)->load();
-    params.oscVoices[1] = static_cast<int>(apvts.getRawParameterValue(IDs::OSC2_VOICES)->load());
-    params.oscWidth[1] = apvts.getRawParameterValue(IDs::OSC2_WIDTH)->load();
-    params.oscVoices[2] = static_cast<int>(apvts.getRawParameterValue(IDs::OSC3_VOICES)->load());
-    params.oscWidth[2] = apvts.getRawParameterValue(IDs::OSC3_WIDTH)->load();
-    params.oscVoices[3] = static_cast<int>(apvts.getRawParameterValue(IDs::OSC4_VOICES)->load());
-    params.oscWidth[3] = apvts.getRawParameterValue(IDs::OSC4_WIDTH)->load();
-
-    params.modBusAmts[0] = apvts.getRawParameterValue(IDs::MOD_BUS_1_AMT)->load();
-    params.modBusAmts[1] = apvts.getRawParameterValue(IDs::MOD_BUS_2_AMT)->load();
-    params.modBusAmts[2] = apvts.getRawParameterValue(IDs::MOD_BUS_3_AMT)->load();
-    params.modBusAmts[3] = apvts.getRawParameterValue(IDs::MOD_BUS_4_AMT)->load();
+    for (int b = 0; b < 4; ++b)
+        params.modBusAmts[b] = cachedParams.modBusAmts[b] ? cachedParams.modBusAmts[b]->load() : 0.0f;
 
     for (int r = 0; r < 5; ++r)
     {
         for (int c = 0; c < 8; ++c)
         {
-            if (auto* val = apvts.getRawParameterValue(IDs::getModCellId(r, c)))
+            if (auto* val = cachedParams.modMatrix[r][c])
                 params.modMatrix[r][c] = static_cast<int>(val->load());
             else
                 params.modMatrix[r][c] = 0;
         }
     }
 
-    params.noiseLevel = apvts.getRawParameterValue(IDs::NOISE_LEVEL)->load();
-    params.noiseColor = apvts.getRawParameterValue(IDs::NOISE_COLOR)->load();
-    params.playMode = static_cast<int>(apvts.getRawParameterValue(IDs::PLAY_MODE)->load());
-    params.glideTime = apvts.getRawParameterValue(IDs::GLIDE_TIME)->load();
+    params.noiseLevel = cachedParams.noiseLevel ? cachedParams.noiseLevel->load() : 0.0f;
+    params.noiseColor = cachedParams.noiseColor ? cachedParams.noiseColor->load() : 0.0f;
+    params.playMode   = cachedParams.playMode   ? static_cast<int>(cachedParams.playMode->load()) : 0;
+    params.glideTime  = cachedParams.glideTime  ? cachedParams.glideTime->load() : 0.0f;
 
-    params.filterType = static_cast<int>(apvts.getRawParameterValue(IDs::FILTER_TYPE)->load());
-    params.filterCutoff = apvts.getRawParameterValue(IDs::FILTER_CUTOFF)->load();
-    params.filterRes = apvts.getRawParameterValue(IDs::FILTER_RES)->load();
-    params.filterDrive = apvts.getRawParameterValue(IDs::FILTER_DRIVE)->load();
-    params.filterEnvAmt = apvts.getRawParameterValue(IDs::FILTER_ENV_AMT)->load();
-    params.filterKeyTrack = apvts.getRawParameterValue(IDs::FILTER_KEYTRACK)->load();
+    params.filterType     = cachedParams.filterType     ? static_cast<int>(cachedParams.filterType->load()) : 0;
+    params.filterCutoff   = cachedParams.filterCutoff   ? cachedParams.filterCutoff->load() : 1000.0f;
+    params.filterRes      = cachedParams.filterRes      ? cachedParams.filterRes->load() : 1.0f;
+    params.filterDrive    = cachedParams.filterDrive    ? cachedParams.filterDrive->load() : 1.0f;
+    params.filterEnvAmt   = cachedParams.filterEnvAmt   ? cachedParams.filterEnvAmt->load() : 0.0f;
+    params.filterKeyTrack = cachedParams.filterKeyTrack ? cachedParams.filterKeyTrack->load() : 0.0f;
 
     params.ampParams = ampParams;
     params.filtParams = filtParams;
     params.modParams = modParams;
 
-    params.lfoRate[0] = apvts.getRawParameterValue(IDs::LFO1_RATE)->load();
-    params.lfoDepth[0] = apvts.getRawParameterValue(IDs::LFO1_DEPTH)->load();
-    params.lfoWave[0] = static_cast<int>(apvts.getRawParameterValue(IDs::LFO1_WAVE)->load());
+    for (int l = 0; l < 2; ++l)
+    {
+        params.lfoRate[l]  = cachedParams.lfoRate[l]  ? cachedParams.lfoRate[l]->load() : 1.0f;
+        params.lfoDepth[l] = cachedParams.lfoDepth[l] ? cachedParams.lfoDepth[l]->load() : 1.0f;
+        params.lfoWave[l]  = cachedParams.lfoWave[l]  ? static_cast<int>(cachedParams.lfoWave[l]->load()) : 0;
+    }
 
-    params.lfoRate[1] = apvts.getRawParameterValue(IDs::LFO2_RATE)->load();
-    params.lfoDepth[1] = apvts.getRawParameterValue(IDs::LFO2_DEPTH)->load();
-    params.lfoWave[1] = static_cast<int>(apvts.getRawParameterValue(IDs::LFO2_WAVE)->load());
+    for (int m = 0; m < 4; ++m)
+    {
+        params.modSrc[m]  = cachedParams.modSrc[m]  ? static_cast<int>(cachedParams.modSrc[m]->load()) : 0;
+        params.modDst[m]  = cachedParams.modDst[m]  ? static_cast<int>(cachedParams.modDst[m]->load()) : 0;
+        params.modAmts[m] = cachedParams.modAmts[m] ? cachedParams.modAmts[m]->load() : 0.0f;
+    }
 
-    params.modSrc[0] = static_cast<int>(apvts.getRawParameterValue(IDs::MOD_SRC_1)->load());
-    params.modDst[0] = static_cast<int>(apvts.getRawParameterValue(IDs::MOD_DST_1)->load());
-    params.modAmts[0] = apvts.getRawParameterValue(IDs::MOD_AMT_1)->load();
+    // Parse active modulation routes ONCE per block (instead of 64 times per block across 16 voices)
+    params.numActiveModRoutes = 0;
+    for (int r = 0; r < 5; ++r)
+    {
+        for (int c = 0; c < 8; ++c)
+        {
+            int cell = params.modMatrix[r][c];
+            if (cell <= 0) continue;
+            float amt = 0.0f;
+            if (cell == 1) amt = 1.0f;
+            else if (cell >= 2 && cell <= 5) amt = params.modBusAmts[cell - 2];
 
-    params.modSrc[1] = static_cast<int>(apvts.getRawParameterValue(IDs::MOD_SRC_2)->load());
-    params.modDst[1] = static_cast<int>(apvts.getRawParameterValue(IDs::MOD_DST_2)->load());
-    params.modAmts[1] = apvts.getRawParameterValue(IDs::MOD_AMT_2)->load();
-
-    params.modSrc[2] = static_cast<int>(apvts.getRawParameterValue(IDs::MOD_SRC_3)->load());
-    params.modDst[2] = static_cast<int>(apvts.getRawParameterValue(IDs::MOD_DST_3)->load());
-    params.modAmts[2] = apvts.getRawParameterValue(IDs::MOD_AMT_3)->load();
-
-    params.modSrc[3] = static_cast<int>(apvts.getRawParameterValue(IDs::MOD_SRC_4)->load());
-    params.modDst[3] = static_cast<int>(apvts.getRawParameterValue(IDs::MOD_DST_4)->load());
-    params.modAmts[3] = apvts.getRawParameterValue(IDs::MOD_AMT_4)->load();
+            if (amt != 0.0f && params.numActiveModRoutes < 44)
+            {
+                params.activeModRoutes[params.numActiveModRoutes++] = {
+                    static_cast<uint8_t>(r),
+                    static_cast<uint8_t>(c),
+                    amt
+                };
+            }
+        }
+    }
+    for (int i = 0; i < 4; ++i)
+    {
+        int sIdx = params.modSrc[i];
+        int dIdx = params.modDst[i];
+        float amt = params.modAmts[i];
+        if (sIdx > 0 && sIdx <= 5 && dIdx > 0 && dIdx <= 8 && amt != 0.0f && params.numActiveModRoutes < 44)
+        {
+            params.activeModRoutes[params.numActiveModRoutes++] = {
+                static_cast<uint8_t>(sIdx - 1),
+                static_cast<uint8_t>(dIdx - 1),
+                amt
+            };
+        }
+    }
 
     synth.setPlayMode(params.playMode);
 
-    for (int i = 0; i < synth.getNumVoices(); ++i)
+    for (auto* voice : cachedVoicePointers)
     {
-        if (auto voice = dynamic_cast<SynthVoice*>(synth.getVoice(i)))
-        {
-            voice->updateBaseParameters(params);
-        }
+        voice->updateBaseParameters(params);
     }
 
     synth.renderNextBlock (buffer, midiMessages, 0, buffer.getNumSamples());
 
     // Apply master volume
     buffer.applyGain(mVol);
+
+    // Apply transparent 5Hz DC blocking to guarantee pure zero-voltage center at audio interface
+    if (totalNumOutputChannels > 0)
+    {
+        auto* ch0 = buffer.getWritePointer(0);
+        for (int s = 0; s < buffer.getNumSamples(); ++s)
+            ch0[s] = dcBlockerL.processSample(ch0[s]);
+    }
+    if (totalNumOutputChannels > 1)
+    {
+        auto* ch1 = buffer.getWritePointer(1);
+        for (int s = 0; s < buffer.getNumSamples(); ++s)
+            ch1[s] = dcBlockerR.processSample(ch1[s]);
+    }
 }
 
 bool VSTSynthV1AudioProcessor::hasEditor() const

@@ -15,6 +15,13 @@ public:
 };
 
 
+struct ActiveModRoute
+{
+    uint8_t src = 0;
+    uint8_t dst = 0;
+    float amount = 0.0f;
+};
+
 struct GlobalSynthParams {
     float oscOct[4];
     float oscDetune[4];
@@ -43,6 +50,9 @@ struct GlobalSynthParams {
 
     int modMatrix[5][8]; // 5 rows (sources) x 8 cols (destinations), cell values 0..5
     float modBusAmts[4]; // 4 bus amount knobs (-1.0 to 1.0)
+
+    ActiveModRoute activeModRoutes[44];
+    int numActiveModRoutes = 0;
 };
 
 class SynthVoice : public juce::SynthesiserVoice
@@ -63,7 +73,9 @@ public:
     void updateBaseParameters(const GlobalSynthParams& params);
 
 private:
-    GlobalSynthParams currentParams;
+    const GlobalSynthParams* latestParamsPtr = nullptr;
+    GlobalSynthParams currentParams {};
+    void syncVoiceParameters(const GlobalSynthParams& p, bool snapSmoothedValues);
     void calculateModulation(float& o1PitchMod, float& o2PitchMod, float& o3PitchMod, float& o4PitchMod, float& o1PwmMod, float& o2PwmMod, float& o3PwmMod, float& o4PwmMod, float& fCutoffMod, float& fResMod);
 
     UnisonOscillator osc1, osc2, osc3, osc4;
@@ -98,6 +110,16 @@ private:
     float baseFEnvAmt = 0.0f, baseFKeyTrack = 0.0f;
     float baseLfo1Depth = 1.0f, baseLfo2Depth = 1.0f;
     float noiseZ1 = 0.0f, noiseZ2 = 0.0f;
+
+    // Fast lock-free 32-bit PRNG for real-time noise generation (replaces rand() which locks MSVCRT)
+    uint32_t rngState = 123456789;
+    inline float getNextRandomFloat() noexcept
+    {
+        rngState ^= rngState << 13;
+        rngState ^= rngState >> 17;
+        rngState ^= rngState << 5;
+        return (static_cast<float>(rngState) * (2.0f / 4294967295.0f)) - 1.0f;
+    }
 
     juce::AudioBuffer<float> voiceBuffer;
 };

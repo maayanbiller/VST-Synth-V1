@@ -41,3 +41,5 @@ headless_gui_render.png
 *.wav
 *.txt
 *.log
+*.mp3
+Tests/output/

@@ -14,52 +14,121 @@ void DAHDSREnvelope::setSampleRate (double newSampleRate)
 
 void DAHDSREnvelope::setParameters (const Parameters& newParams)
 {
-    // Check if parameters actually changed
-    bool changed = (parameters.delay != newParams.delay ||
-                    parameters.attack != newParams.attack ||
-                    parameters.hold != newParams.hold ||
-                    parameters.decay != newParams.decay ||
-                    parameters.sustain != newParams.sustain ||
-                    parameters.release != newParams.release);
-    
-    parameters = newParams;
-    
-    // Dynamically recalculate if we are actively moving
-    if (changed && currentState != State::Idle && currentState != State::Sustain)
+    float clampedSustain = std::clamp(newParams.sustain, 0.0f, 1.0f);
+    if (parameters.delay == newParams.delay &&
+        parameters.attack == newParams.attack &&
+        parameters.hold == newParams.hold &&
+        parameters.decay == newParams.decay &&
+        parameters.sustain == clampedSustain &&
+        parameters.release == newParams.release)
     {
-        enterState(currentState, false); // false = don't reset sample counter
+        return;
+    }
+
+    parameters = newParams;
+    parameters.sustain = clampedSustain;
+
+    if (currentState == State::Sustain)
+    {
+        currentValue = parameters.sustain;
+    }
+    else if (currentState == State::Attack)
+    {
+        int nA = std::max(1, static_cast<int>(parameters.attack * sampleRate));
+        phaseInc = 1.0f / static_cast<float>(nA);
+    }
+    else if (currentState == State::Decay)
+    {
+        int nD = std::max(1, static_cast<int>(parameters.decay * sampleRate));
+        phaseInc = 1.0f / static_cast<float>(nD);
+        decayExpMult = std::exp(-4.0f * phaseInc);
+        decayExpVal = std::exp(-4.0f * std::min(1.0f, phase));
+    }
+    else if (currentState == State::Release)
+    {
+        int nR = std::max(1, static_cast<int>(parameters.release * sampleRate));
+        phaseInc = 1.0f / static_cast<float>(nR);
+        releaseExpMult = std::exp(-4.5f * phaseInc);
+        releaseExpVal = std::exp(-4.5f * std::min(1.0f, phase));
     }
 }
 
 void DAHDSREnvelope::noteOn()
 {
-    samplesInCurrentState = 0;
-
-    // If attack and decay are effectively 0, start immediately on sustain level
-    if (parameters.attack <= 0.0005f && parameters.decay <= 0.0005f && parameters.delay <= 0.0001f)
+    // Requirement: If attack and decay are effectively 0, start immediately on sustain level
+    if (parameters.attack <= 0.0001f && parameters.decay <= 0.0001f && parameters.delay <= 0.0001f)
     {
         currentValue = parameters.sustain;
+        startValue = parameters.sustain;
         currentState = State::Sustain;
-        stateLengthSamples = 0;
-        return;
-    }
-    else if (parameters.attack <= 0.0005f && parameters.delay <= 0.0001f)
-    {
-        currentValue = 1.0f;
-        enterState(State::Hold, true);
         return;
     }
 
-    currentValue = 0.0f;
-    enterState(State::Delay, true);
+    if (currentState == State::Idle)
+    {
+        currentValue = 0.0f;
+        startValue = 0.0f;
+    }
+    else
+    {
+        // Clickless retriggering from existing level
+        startValue = currentValue;
+    }
+
+    if (parameters.delay > 0.0001f)
+    {
+        delayCount = static_cast<int>(parameters.delay * sampleRate);
+        currentState = State::Delay;
+    }
+    else
+    {
+        enterAttack();
+    }
+}
+
+void DAHDSREnvelope::enterAttack()
+{
+    int nA = std::max(1, static_cast<int>(parameters.attack * sampleRate));
+    phase = 0.0f;
+    phaseInc = 1.0f / static_cast<float>(nA);
+    currentState = State::Attack;
+}
+
+void DAHDSREnvelope::enterDecay()
+{
+    int nD = std::max(1, static_cast<int>(parameters.decay * sampleRate));
+    phase = 0.0f;
+    phaseInc = 1.0f / static_cast<float>(nD);
+    decayExpVal = 1.0f;
+    decayExpMult = std::exp(-4.0f * phaseInc);
+    startValue = currentValue;
+    currentState = State::Decay;
+}
+
+void DAHDSREnvelope::enterRelease()
+{
+    int nR = std::max(1, static_cast<int>(parameters.release * sampleRate));
+    phase = 0.0f;
+    phaseInc = 1.0f / static_cast<float>(nR);
+    releaseExpVal = 1.0f;
+    releaseExpMult = std::exp(-4.5f * phaseInc);
+    startValue = currentValue;
+    currentState = State::Release;
 }
 
 void DAHDSREnvelope::noteOff()
 {
     if (currentState != State::Idle)
     {
-        samplesInCurrentState = 0;
-        enterState(State::Release, true);
+        if (currentValue <= 0.00001f || parameters.release <= 0.0001f)
+        {
+            currentValue = 0.0f;
+            currentState = State::Idle;
+        }
+        else
+        {
+            enterRelease();
+        }
     }
 }
 
@@ -67,6 +136,13 @@ void DAHDSREnvelope::reset()
 {
     currentState = State::Idle;
     currentValue = 0.0f;
+    startValue = 0.0f;
+    phase = 0.0f;
+    phaseInc = 0.0f;
+    decayExpVal = 1.0f;
+    releaseExpVal = 1.0f;
+    delayCount = 0;
+    holdCount = 0;
 }
 
 bool DAHDSREnvelope::isActive() const
@@ -74,130 +150,104 @@ bool DAHDSREnvelope::isActive() const
     return currentState != State::Idle;
 }
 
-void DAHDSREnvelope::enterState(State newState, bool resetSamples)
+float DAHDSREnvelope::getNextSample()
 {
-    currentState = newState;
-    if (resetSamples) samplesInCurrentState = 0;
-
-    int remainingSamples = 0;
-
     switch (currentState)
     {
         case State::Idle:
-            currentValue = 0.0f;
-            stateLengthSamples = 0;
-            return;
-            
+            return 0.0f;
+
         case State::Delay:
-            if (resetSamples) currentValue = 0.0f;
-            stateLengthSamples = static_cast<int>(parameters.delay * sampleRate);
-            break;
+            delayCount--;
+            if (delayCount <= 0)
+                enterAttack();
+            return 0.0f;
 
         case State::Attack:
-            if (resetSamples) currentValue = 0.0f;
-            stateLengthSamples = static_cast<int>(parameters.attack * sampleRate);
-            remainingSamples = stateLengthSamples - samplesInCurrentState;
-            if (remainingSamples > 0)
+        {
+            float x = std::min(1.0f, phase);
+            // Musical smoothstep S-curve: zero initial derivative (no pop/jump), zero landing derivative
+            float sCurve = x * x * (3.0f - 2.0f * x);
+            float val = startValue + (1.0f - startValue) * sCurve;
+            currentValue = val;
+
+            phase += phaseInc;
+            if (phase >= 1.0f)
             {
-                targetValue = 1.02f;
-                coef = 1.0f - std::exp(-4.5f / (float)remainingSamples); 
+                currentValue = 1.0f;
+                if (parameters.hold > 0.0001f)
+                {
+                    holdCount = static_cast<int>(parameters.hold * sampleRate);
+                    currentState = State::Hold;
+                }
+                else if (parameters.decay > 0.0001f)
+                {
+                    enterDecay();
+                }
+                else
+                {
+                    currentState = State::Sustain;
+                }
             }
-            break;
+            return val;
+        }
 
         case State::Hold:
-            if (resetSamples) currentValue = 1.0f;
-            stateLengthSamples = static_cast<int>(parameters.hold * sampleRate);
-            break;
+            holdCount--;
+            if (holdCount <= 0)
+            {
+                if (parameters.decay > 0.0001f)
+                    enterDecay();
+                else
+                    currentState = State::Sustain;
+            }
+            return 1.0f;
 
         case State::Decay:
-            stateLengthSamples = static_cast<int>(parameters.decay * sampleRate);
-            remainingSamples = stateLengthSamples - samplesInCurrentState;
-            if (remainingSamples > 0)
+        {
+            // Normalized analog RC decay landing seamlessly on sustain level using recursive exp multiplier
+            constexpr float expMinD = 0.01831563888f; // exp(-4.0f)
+            constexpr float normD = 1.0f / (1.0f - expMinD);
+            float expTerm = std::max(0.0f, (decayExpVal - expMinD) * normD);
+            decayExpVal *= decayExpMult;
+
+            float val = parameters.sustain + (startValue - parameters.sustain) * expTerm;
+            currentValue = val;
+
+            phase += phaseInc;
+            if (phase >= 1.0f)
             {
-                targetValue = parameters.sustain;
-                coef = 1.0f - std::exp(-4.5f / (float)remainingSamples);
+                currentValue = parameters.sustain;
+                currentState = State::Sustain;
             }
-            break;
+            return val;
+        }
 
         case State::Sustain:
             currentValue = parameters.sustain;
-            stateLengthSamples = 0;
-            return;
+            return currentValue;
 
         case State::Release:
-            stateLengthSamples = static_cast<int>(parameters.release * sampleRate);
-            remainingSamples = std::max(1, stateLengthSamples - samplesInCurrentState);
-            // Pure analog RC discharge targeting 0.0 with 60 dB decay over release time
-            releaseMultiplier = std::exp(-6.90775f / (float)remainingSamples);
-            break;
-    }
-
-    // Skip zero-length states safely
-    while (currentState != State::Idle && currentState != State::Sustain && stateLengthSamples <= samplesInCurrentState)
-    {
-        advanceToNextState();
-        if (currentState == State::Idle || currentState == State::Sustain) break;
-    }
-}
-
-void DAHDSREnvelope::advanceToNextState()
-{
-    samplesInCurrentState = 0; // reset for next state
-    switch (currentState)
-    {
-        case State::Delay:   enterState(State::Attack, true);  break;
-        case State::Attack:  
-            currentValue = 1.0f; 
-            enterState(State::Hold, true);    
-            break;
-        case State::Hold:    enterState(State::Decay, true);   break;
-        case State::Decay:   
-            currentValue = parameters.sustain;
-            enterState(State::Sustain, true); 
-            break;
-        case State::Sustain: break;
-        case State::Release: 
-            currentValue = 0.0f;
-            enterState(State::Idle, true);    
-            break;
-        case State::Idle:    break;
-    }
-}
-
-float DAHDSREnvelope::getNextSample()
-{
-    if (currentState == State::Idle || currentState == State::Sustain || currentState == State::Delay || currentState == State::Hold)
-    {
-        samplesInCurrentState++;
-        if ((currentState == State::Delay || currentState == State::Hold) && samplesInCurrentState >= stateLengthSamples)
-            advanceToNextState();
-        return currentValue;
-    }
-
-    if (currentState == State::Release)
-    {
-        currentValue *= releaseMultiplier;
-        samplesInCurrentState++;
-
-        // Seamless asymptotic termination at inaudible noise floor (-94 dB)
-        if (currentValue < 0.00002f)
         {
-            currentValue = 0.0f;
-            enterState(State::Idle, true);
-            return 0.0f;
+            // Normalized analog RC release landing on exact 0.000000f without cutoff cliff
+            constexpr float expMinR = 0.01110899653f; // exp(-4.5f)
+            constexpr float normR = 1.0f / (1.0f - expMinR);
+            float expTerm = std::max(0.0f, (releaseExpVal - expMinR) * normR);
+            releaseExpVal *= releaseExpMult;
+
+            float val = startValue * expTerm;
+            currentValue = val;
+
+            phase += phaseInc;
+            if (phase >= 1.0f || val <= 0.0f)
+            {
+                currentValue = 0.0f;
+                currentState = State::Idle;
+                return 0.0f;
+            }
+            return val;
         }
-        return currentValue;
     }
 
-    // Exponential RC curve processing for Attack & Decay
-    float output = currentValue;
-    currentValue += (targetValue - currentValue) * coef;
-    samplesInCurrentState++;
-
-    if (samplesInCurrentState >= stateLengthSamples)
-    {
-        advanceToNextState();
-    }
-
-    return std::clamp(output, 0.0f, 1.0f);
+    return 0.0f;
 }

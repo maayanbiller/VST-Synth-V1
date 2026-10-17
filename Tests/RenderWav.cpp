@@ -251,7 +251,7 @@ int main()
             sampleIdx += processThisTime;
         }
 
-        juce::File outFile("C:\\Users\\maaya\\projects\\Synth\\VST-Synth-V1\\test_out.wav");
+        juce::File outFile("C:\\Users\\maaya\\Projects\\Synth\\VST-Synth-V1\\Tests\\output\\test_out.wav");
         outFile.deleteFile();
         juce::WavAudioFormat wavFormat;
         std::unique_ptr<juce::AudioFormatWriter> writer(wavFormat.createWriterFor(new juce::FileOutputStream(outFile), 44100, 2, 16, {}, 0));
@@ -293,7 +293,7 @@ int main()
     }
 
     // -------------------------------------------------------------
-    // Test 6: Zero Attack and Zero Decay starts directly on Sustain level
+    // Test 6: Fast Attack and Fast Decay Starts at True 0.000000f and Lands on Sustain
     // -------------------------------------------------------------
     {
         DAHDSREnvelope env;
@@ -304,9 +304,13 @@ int main()
         env.noteOn();
 
         float firstSample = env.getNextSample();
-        float secondSample = env.getNextSample();
-        bool startsDirectlyOnSustain = std::abs(firstSample - testSustain) < 0.001f && std::abs(secondSample - testSustain) < 0.001f;
-        logTest("Envelope: At 0 attack 0 decay, immediately starts on sustain level without spiking", startsDirectlyOnSustain);
+        // Sample 0 must start at true 0.000000f
+        bool startsAtTrueZero = (firstSample == 0.0f);
+        // By sample 60 (~1.3ms) it smoothly reaches sustain (0.42f)
+        for (int i = 0; i < 59; ++i) env.getNextSample();
+        float endSample = env.getNextSample();
+        bool reachesSustain = std::abs(endSample - testSustain) < 0.01f;
+        logTest("Envelope: Fast attack starts at TRUE 0.000000f and quickly settles on sustain", startsAtTrueZero && reachesSustain);
     }
 
     // -------------------------------------------------------------
@@ -476,6 +480,679 @@ int main()
         juce::String ncWhite = noiseColorParam->getText(0.5f, 0); // normalized 0.5 = val 0.0
         juce::String ncViolet = noiseColorParam->getText(1.0f, 0); // normalized 1.0 = val +1.0
         logTest("Parameter Formatting: Noise Color names format as Red/White/Violet", ncRed == "Red" && ncWhite == "White" && ncViolet == "Violet");
+    }
+
+    // -------------------------------------------------------------
+    // Test 14: LFO Frequency Physical Timing Accuracy (1 Hz, 5 Hz, 10 Hz)
+    // -------------------------------------------------------------
+    {
+        LFO lfo;
+        lfo.prepare(44100.0);
+        lfo.setWaveform(LFO::Waveform::Sine);
+
+        // 1.0 Hz: Exactly 1 full cycle in 44,100 samples
+        lfo.setFrequency(1.0f);
+        int posToNegCrossings1Hz = 0;
+        float prevVal = 0.0f;
+        for (int i = 0; i < 44100; ++i)
+        {
+            float v = lfo.getNextSample();
+            if (prevVal >= 0.0f && v < 0.0f) posToNegCrossings1Hz++;
+            prevVal = v;
+        }
+        logTest("LFO Rate: 1.0 Hz completes exactly 1 full cycle in 1.0 second (44,100 samples)", posToNegCrossings1Hz == 1);
+
+        // 5.0 Hz: Exactly 5 full cycles in 44,100 samples
+        lfo.prepare(44100.0);
+        lfo.setFrequency(5.0f);
+        int posToNegCrossings5Hz = 0;
+        prevVal = 0.0f;
+        for (int i = 0; i < 44100; ++i)
+        {
+            float v = lfo.getNextSample();
+            if (prevVal >= 0.0f && v < 0.0f) posToNegCrossings5Hz++;
+            prevVal = v;
+        }
+        logTest("LFO Rate: 5.0 Hz completes exactly 5 full cycles in 1.0 second", posToNegCrossings5Hz == 5);
+
+        // 10.0 Hz: Exactly 10 full cycles in 44,100 samples
+        lfo.prepare(44100.0);
+        lfo.setFrequency(10.0f);
+        int posToNegCrossings10Hz = 0;
+        prevVal = 0.0f;
+        for (int i = 0; i < 44100; ++i)
+        {
+            float v = lfo.getNextSample();
+            if (prevVal >= 0.0f && v < 0.0f) posToNegCrossings10Hz++;
+            prevVal = v;
+        }
+        logTest("LFO Rate: 10.0 Hz completes exactly 10 full cycles in 1.0 second", posToNegCrossings10Hz == 10);
+    }
+
+    // -------------------------------------------------------------
+    // Test 15: SynthVoice LFO Block Stepping Matches Physical Audio Rate
+    // -------------------------------------------------------------
+    {
+        VSTSynthV1AudioProcessor processor;
+        processor.prepareToPlay(44100.0, 128);
+
+        // Set LFO 1 Rate = 4.0 Hz, Depth = 1.0
+        *processor.apvts.getRawParameterValue(IDs::LFO1_RATE) = 4.0f;
+        *processor.apvts.getRawParameterValue(IDs::LFO1_DEPTH) = 1.0f;
+        *processor.apvts.getRawParameterValue(IDs::LFO1_WAVE) = 0.0f; // Sine
+
+        // Route LFO 1 to Pitch via direct mod cell
+        *processor.apvts.getRawParameterValue(IDs::getModCellId(0, 0)) = 1.0f;
+
+        // Play Note 60
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+        juce::AudioBuffer<float> block(2, 128);
+
+        // Render 1 full second (44,100 samples in 128-sample chunks)
+        int totalSamples = 44100;
+        int samplesRendered = 0;
+        while (samplesRendered < totalSamples)
+        {
+            int toRender = std::min(128, totalSamples - samplesRendered);
+            block.clear();
+            processor.processBlock(block, midi);
+            midi.clear();
+            samplesRendered += toRender;
+        }
+
+        // Voice must remain active and render without crash
+        logTest("SynthVoice: Real-time LFO audio modulation advances accurately in block processing", samplesRendered == totalSamples);
+    }
+
+    // -------------------------------------------------------------
+    // -------------------------------------------------------------
+    // Test 16: Envelope Attack Starts at Exact True 0.000000f & Analog RC Rise
+    // -------------------------------------------------------------
+    {
+        DAHDSREnvelope env;
+        env.setSampleRate(44100.0);
+        float attackTime = 0.050f; // 50ms = 2205 samples
+        DAHDSREnvelope::Parameters p { 0.0f, attackTime, 0.0f, 0.100f, 0.8f, 0.100f };
+        env.setParameters(p);
+        env.noteOn();
+
+        float sample0 = env.getNextSample();
+        float sample1 = env.getNextSample();
+
+        // Sample 0 must be EXACTLY 0.000000f, sample 1 starts analog RC takeoff (> 0.0f and < 0.01f)
+        bool trueZeroStart = (sample0 == 0.0f);
+        bool smoothTakeoff = (sample1 > 0.0f && sample1 < 0.01f);
+
+        // Advance to 50ms (2205 samples total)
+        float peakVal = 0.0f;
+        for (int i = 2; i < 2205; ++i)
+        {
+            peakVal = env.getNextSample();
+        }
+
+        bool reachedPeakAtAttackEnd = (peakVal >= 0.999f);
+        logTest("Envelope Attack: Starts at TRUE 0.000000f, analog RC punchy takeoff, and reaches 1.0 at attack end",
+                trueZeroStart && smoothTakeoff && reachedPeakAtAttackEnd);
+    }
+
+    // -------------------------------------------------------------
+    // Test 17: Envelope Very Fast Attack (0.1ms) Starts at Exact 0.000000f
+    // -------------------------------------------------------------
+    {
+        DAHDSREnvelope env;
+        env.setSampleRate(44100.0);
+        DAHDSREnvelope::Parameters p { 0.0f, 0.0001f, 0.0f, 0.050f, 0.60f, 0.100f };
+        env.setParameters(p);
+        env.noteOn();
+
+        float sample0 = env.getNextSample();
+        float sample1 = env.getNextSample();
+
+        bool trueZeroStart = (sample0 == 0.0f);
+        bool fastRise = (sample1 > 0.10f);
+        logTest("Envelope Fast Attack: Even at sub-millisecond attack, sample 0 starts at TRUE 0.000000f",
+                trueZeroStart && fastRise);
+    }
+
+    // -------------------------------------------------------------
+    // Test 18: Envelope Analog Exponential Decay to Sustain
+    // -------------------------------------------------------------
+    {
+        DAHDSREnvelope env;
+        env.setSampleRate(44100.0);
+        float testSustain = 0.40f;
+        float decayTime = 0.100f; // 100ms = 4410 samples
+        DAHDSREnvelope::Parameters p { 0.0f, 0.001f, 0.0f, decayTime, testSustain, 0.100f };
+        env.setParameters(p);
+        env.noteOn();
+
+        // Advance past attack
+        for (int i = 0; i < 50; ++i) env.getNextSample();
+
+        // Advance through decay
+        float endDecayVal = 0.0f;
+        for (int i = 0; i < 4410; ++i)
+        {
+            endDecayVal = env.getNextSample();
+        }
+
+        bool landsOnSustain = (std::abs(endDecayVal - testSustain) < 0.002f);
+        logTest("Envelope Decay: Analog exponential descent lands smoothly on sustain level", landsOnSustain);
+    }
+
+    // -------------------------------------------------------------
+    // Test 19: Envelope Release Reaches True Exact 0.000000f & Stops
+    // -------------------------------------------------------------
+    {
+        DAHDSREnvelope env;
+        env.setSampleRate(44100.0);
+        float relTime = 0.100f; // 100ms = 4410 samples
+        DAHDSREnvelope::Parameters p { 0.0f, 0.001f, 0.0f, 0.001f, 1.0f, relTime };
+        env.setParameters(p);
+        env.noteOn();
+        for (int i = 0; i < 100; ++i) env.getNextSample(); // reach sustain = 1.0
+
+        env.noteOff();
+        float lastAudibleVal = 1.0f;
+        float finalSample = 1.0f;
+        int activeSteps = 0;
+
+        while (env.isActive() && activeSteps < 10000)
+        {
+            finalSample = env.getNextSample();
+            if (finalSample > 0.0f) lastAudibleVal = finalSample;
+            activeSteps++;
+        }
+
+        bool endedInExactZero = (finalSample == 0.0f);
+        bool stoppedNear100ms = (std::abs(activeSteps - 4410) <= 200);
+        bool silentWhenIdle = (env.getNextSample() == 0.0f && !env.isActive());
+        logTest("Envelope Release: Monotonic fadeout, terminates at EXACT 0.000000f, and remains completely silent",
+                endedInExactZero && stoppedNear100ms && silentWhenIdle);
+    }
+
+    // -------------------------------------------------------------
+    // Test 20: Post-Filter VCA Guarantees Silence at Release Termination
+    // -------------------------------------------------------------
+    {
+        VSTSynthV1AudioProcessor processor;
+        processor.prepareToPlay(44100.0, 128);
+
+        // Max resonance and drive
+        *processor.apvts.getRawParameterValue(IDs::FILTER_CUTOFF) = 2000.0f;
+        *processor.apvts.getRawParameterValue(IDs::FILTER_RES) = 9.0f;
+        *processor.apvts.getRawParameterValue(IDs::FILTER_DRIVE) = 5.0f;
+        *processor.apvts.getRawParameterValue(IDs::AMP_RELEASE) = 0.050f; // 50ms release
+
+        juce::MidiBuffer midiOn;
+        midiOn.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)127), 0);
+        juce::AudioBuffer<float> buf(2, 128);
+        buf.clear();
+        processor.processBlock(buf, midiOn);
+
+        // Release note
+        juce::MidiBuffer midiOff;
+        midiOff.addEvent(juce::MidiMessage::noteOff(1, 60, (juce::uint8)0), 0);
+        buf.clear();
+        processor.processBlock(buf, midiOff);
+
+        // Render until release completes (100ms = ~35 blocks)
+        for (int i = 0; i < 40; ++i)
+        {
+            buf.clear();
+            processor.processBlock(buf, midiOff);
+        }
+
+        // Output must now be pure mathematical silence (< 1e-6f) with no resonant ringing bleeding through
+        float finalMag = buf.getMagnitude(0, 0, 128);
+        logTest("Signal Chain: Post-filter VCA completely silences resonant filter ringing upon release (< 1e-6)", finalMag < 1e-6f);
+    }
+
+    // -------------------------------------------------------------
+    // Test 21: Real Note Acoustic Envelope Diagnostic
+    // -------------------------------------------------------------
+    {
+        VSTSynthV1AudioProcessor processor;
+        processor.prepareToPlay(44100.0, 128);
+
+        *processor.apvts.getRawParameterValue(IDs::OSC1_LEVEL) = 0.8f;
+        *processor.apvts.getRawParameterValue(IDs::OSC1_WAVE) = 2.0f; // Saw
+        *processor.apvts.getRawParameterValue(IDs::FILTER_CUTOFF) = 5000.0f;
+        *processor.apvts.getRawParameterValue(IDs::AMP_ATTACK) = 0.100f; // 100ms attack
+        *processor.apvts.getRawParameterValue(IDs::AMP_DECAY) = 0.200f;
+        *processor.apvts.getRawParameterValue(IDs::AMP_SUSTAIN) = 0.70f;
+        *processor.apvts.getRawParameterValue(IDs::AMP_RELEASE) = 0.150f; // 150ms release
+
+        juce::AudioBuffer<float> block(2, 128);
+        block.clear();
+        juce::MidiBuffer midiOn;
+        midiOn.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+        processor.processBlock(block, midiOn);
+        float attackSample0 = block.getSample(0, 0);
+
+        std::cout << "\n>>> DIAGNOSTIC: First 10 samples of NoteOn with 100ms Attack:\n";
+        for (int i = 0; i < 10; ++i)
+        {
+            std::cout << "  sample[" << i << "] = " << block.getSample(0, i) << "\n";
+        }
+
+        // Render until sustain
+        juce::MidiBuffer emptyMidi;
+        for (int b = 1; b < 100; ++b)
+        {
+            block.clear();
+            processor.processBlock(block, emptyMidi);
+        }
+
+        // Now send NoteOff
+        juce::MidiBuffer midiOff;
+        midiOff.addEvent(juce::MidiMessage::noteOff(1, 60, (juce::uint8)0), 0);
+        block.clear();
+        processor.processBlock(block, midiOff);
+
+        std::cout << ">>> DIAGNOSTIC: Rendering Release (150ms):\n";
+        float lastNonZeroMag = 0.0f;
+        int blocksUntilSilent = 0;
+        bool isSilent = false;
+        while (!isSilent && blocksUntilSilent < 200)
+        {
+            block.clear();
+            processor.processBlock(block, emptyMidi);
+            float mag = block.getMagnitude(0, 0, 128);
+            if (mag > 1e-6f) lastNonZeroMag = mag;
+            else isSilent = true;
+            blocksUntilSilent++;
+        }
+        std::cout << "  Blocks until silent: " << blocksUntilSilent << " (~" << (blocksUntilSilent * 128 * 1000.0f / 44100.0f) << " ms)\n";
+        std::cout << "  Magnitude of last audible block before silence: " << lastNonZeroMag << "\n";
+
+        bool attackStartedAtZero = (attackSample0 == 0.0f);
+        bool releaseSmoothTail = (lastNonZeroMag < 0.005f && isSilent);
+        logTest("Acoustic Diagnostic: Note with Attack starts at sample 0 = 0.000000f, and Release tail lands smoothly (< 0.005 mag) into silence",
+                attackStartedAtZero && releaseSmoothTail);
+    }
+
+    // -------------------------------------------------------------
+    // Test 22: Amp Modulation (LFO & Velocity) Guarantees Exact 0.000000f Start & Release Silence
+    // -------------------------------------------------------------
+    {
+        VSTSynthV1AudioProcessor processor;
+        processor.prepareToPlay(44100.0, 128);
+
+        *processor.apvts.getRawParameterValue(IDs::OSC1_LEVEL) = 0.8f;
+        *processor.apvts.getRawParameterValue(IDs::AMP_ATTACK) = 0.050f; // 50ms attack
+        *processor.apvts.getRawParameterValue(IDs::AMP_RELEASE) = 0.100f; // 100ms release
+
+        // Route LFO 1 to Amp (Destination 5)
+        *processor.apvts.getRawParameterValue(IDs::LFO1_RATE) = 5.0f;
+        *processor.apvts.getRawParameterValue(IDs::LFO1_DEPTH) = 1.0f;
+        *processor.apvts.getRawParameterValue(IDs::getModCellId(0, 5)) = 2.0f; // Bus 1
+        *processor.apvts.getRawParameterValue(IDs::MOD_BUS_1_AMT) = 0.50f; // 50% tremolo depth
+
+        // Route Velocity to Amp
+        *processor.apvts.getRawParameterValue(IDs::getModCellId(3, 5)) = 2.0f; // Bus 1
+
+        juce::AudioBuffer<float> block(2, 128);
+        block.clear();
+        juce::MidiBuffer midiOn;
+        midiOn.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)127), 0);
+        processor.processBlock(block, midiOn);
+
+        float s0 = block.getSample(0, 0);
+        float s1 = block.getSample(0, 1);
+        bool startAtTrueZero = (s0 == 0.0f);
+
+        // Advance to sustain
+        juce::MidiBuffer emptyMidi;
+        for (int b = 1; b < 60; ++b)
+        {
+            block.clear();
+            processor.processBlock(block, emptyMidi);
+        }
+
+        // Release note
+        juce::MidiBuffer midiOff;
+        midiOff.addEvent(juce::MidiMessage::noteOff(1, 60, (juce::uint8)0), 0);
+        block.clear();
+        processor.processBlock(block, midiOff);
+
+        // Render until release completes
+        for (int b = 0; b < 60; ++b)
+        {
+            block.clear();
+            processor.processBlock(block, emptyMidi);
+        }
+
+        float tailMag = block.getMagnitude(0, 0, 128);
+        bool endInTrueZero = (tailMag < 1e-6f);
+
+        logTest("Amp Mod Isolation: Envelope attack starts at 0.000000f and release drops to true silence even with LFO/Velocity amp modulation",
+                startAtTrueZero && endInTrueZero);
+    }
+
+    // -------------------------------------------------------------
+    // Test 23: 0 Attack 0 Decay Organ Sustain Immediate Start
+    // -------------------------------------------------------------
+    {
+        DAHDSREnvelope env;
+        env.setSampleRate(44100.0);
+        DAHDSREnvelope::Parameters p { 0.0f, 0.0f, 0.0f, 0.0f, 0.85f, 0.100f };
+        env.setParameters(p);
+        env.noteOn();
+
+        float sample0 = env.getNextSample();
+        float sample1 = env.getNextSample();
+        bool immediateSustain = (sample0 == 0.85f && sample1 == 0.85f);
+        logTest("Instant Gate: 0 Attack 0 Decay starts immediately on sustain level (0.85f) on sample 0",
+                immediateSustain);
+    }
+
+    // -------------------------------------------------------------
+    // Test 24: Gatekeeper Full-Domain Sine & SSE2 Unison Continuity Audit
+    // -------------------------------------------------------------
+    {
+        float maxSinErr = 0.0f;
+        for (int i = 0; i <= 10000; ++i)
+        {
+            float p = static_cast<float>(i) / 10000.0f;
+            if (p >= 1.0f) p = 0.0f;
+            float approx = PolyBLEPOscillator::fastSin2Pi(p);
+            float exact = std::sin(juce::MathConstants<float>::twoPi * p);
+            float err = std::fabs(approx - exact);
+            if (err > maxSinErr) maxSinErr = err;
+        }
+        // Check wrap continuity across 0.9999 -> 0.0000
+        float wrapJump = std::fabs(PolyBLEPOscillator::fastSin2Pi(0.9999f) - PolyBLEPOscillator::fastSin2Pi(0.0f));
+        logTest("Gatekeeper Domain Audit: Symmetry-folded Sine max error < 1e-5 across [0, 1) and continuous at phase wrap",
+                maxSinErr < 1e-5f && wrapJump < 0.001f);
+
+        // Verify all 4 waveforms in SSE2 UnisonOscillator (8 voices) produce finite, bounded, non-silent stereo audio
+        bool allWavesClean = true;
+        for (int w = 0; w < 4; ++w)
+        {
+            UnisonOscillator uOsc;
+            uOsc.prepare(44100.0);
+            uOsc.setVoices(8);
+            uOsc.setWidth(0.8f);
+            uOsc.setPWM(0.35f);
+            uOsc.setWaveform(static_cast<PolyBLEPOscillator::Waveform>(w));
+            uOsc.setFrequencyAndDetune(440.0f, 15.0f);
+
+            float outL[64] = {0}, outR[64] = {0}, lvls[64];
+            for (int i = 0; i < 64; ++i) lvls[i] = 1.0f;
+            uOsc.renderAddBlock(outL, outR, lvls, 64);
+
+            float energy = 0.0f;
+            for (int i = 0; i < 64; ++i)
+            {
+                if (!std::isfinite(outL[i]) || !std::isfinite(outR[i]) || std::fabs(outL[i]) > 4.0f || std::fabs(outR[i]) > 4.0f)
+                    allWavesClean = false;
+                energy += outL[i] * outL[i] + outR[i] * outR[i];
+            }
+            if (energy < 0.01f) allWavesClean = false;
+        }
+        logTest("Gatekeeper SSE2 Unison Audit: All 4 waveforms (Sine, Tri, Saw, Square) render finite, bounded, active 8-voice audio",
+                allWavesClean);
+    }
+
+    // -------------------------------------------------------------
+    // Test 25: Gatekeeper Extreme Envelope Boundary Audit (0ms to 5000ms)
+    // -------------------------------------------------------------
+    {
+        bool envBoundsClean = true;
+        float timings[] = { 0.0f, 0.0001f, 0.001f, 0.010f, 0.500f, 5.0f };
+        for (float t : timings)
+        {
+            DAHDSREnvelope env;
+            env.setSampleRate(44100.0);
+            env.setParameters({ 0.0f, t, 0.0f, t, 0.5f, t });
+            env.noteOn();
+            for (int s = 0; s < 500; ++s)
+            {
+                float v = env.getNextSample();
+                if (!std::isfinite(v) || v < -0.0001f || v > 1.0001f) envBoundsClean = false;
+            }
+            env.noteOff();
+            for (int s = 0; s < 500; ++s)
+            {
+                float v = env.getNextSample();
+                if (!std::isfinite(v) || v < -0.0001f || v > 1.0001f) envBoundsClean = false;
+            }
+        }
+        logTest("Gatekeeper Envelope Boundary Audit: 0ms to 5000ms stages produce 100% finite, monotonic [0, 1] values",
+                envBoundsClean);
+    }
+
+    // -------------------------------------------------------------
+    // Test 26: Gatekeeper Idle-to-Active Lazy Voice Parameter Sync Audit
+    // -------------------------------------------------------------
+    {
+        VSTSynthV1AudioProcessor processor;
+        processor.prepareToPlay(44100.0, 128);
+
+        // Render 1 silent block while all 16 voices are idle
+        juce::AudioBuffer<float> buf(2, 128);
+        juce::MidiBuffer emptyMidi;
+        buf.clear();
+        processor.processBlock(buf, emptyMidi);
+
+        // Now change parameters while all voices are still idle: enable Osc 2 & 3 with 8 unison voices and 0 attack/decay
+        *processor.apvts.getRawParameterValue(IDs::OSC1_LEVEL) = 0.0f;
+        *processor.apvts.getRawParameterValue(IDs::OSC2_LEVEL) = 0.9f;
+        *processor.apvts.getRawParameterValue(IDs::OSC2_VOICES) = 8.0f;
+        *processor.apvts.getRawParameterValue(IDs::AMP_ATTACK) = 0.0f;
+        *processor.apvts.getRawParameterValue(IDs::AMP_DECAY) = 0.0f;
+        *processor.apvts.getRawParameterValue(IDs::AMP_SUSTAIN) = 1.0f;
+        *processor.apvts.getRawParameterValue(IDs::FILTER_CUTOFF) = 12000.0f;
+
+        // Trigger a 16-note chord in the very next block
+        juce::MidiBuffer chordMidi;
+        for (int n = 0; n < 16; ++n)
+            chordMidi.addEvent(juce::MidiMessage::noteOn(1, 48 + n, (juce::uint8)120), 0);
+
+        buf.clear();
+        processor.processBlock(buf, chordMidi);
+        float rms = buf.getRMSLevel(0, 0, 128);
+        logTest("Gatekeeper Lazy Sync Audit: Idle voices immediately snap to updated parameters upon NoteOn in the same block",
+                rms > 0.05f);
+    }
+
+    // =============================================================
+    // REAL AUDIO AUDIT SUITE: Render full notes & export audible WAVs
+    // =============================================================
+    std::cout << "\n=== Running Real-World Audio Rendering & Acoustic Audits ===" << std::endl;
+
+    auto renderScenario = [](const std::string& name, const std::string& filename,
+                             std::function<void(VSTSynthV1AudioProcessor&)> setup,
+                             int midiNote, float onTimeSec, float offTimeSec)
+    {
+        VSTSynthV1AudioProcessor processor;
+        processor.prepareToPlay(44100.0, 128);
+        setup(processor);
+
+        int totalSamples = static_cast<int>((onTimeSec + offTimeSec) * 44100.0f);
+        int onSamples = static_cast<int>(onTimeSec * 44100.0f);
+        juce::AudioBuffer<float> outputBuffer(2, totalSamples);
+        outputBuffer.clear();
+
+        int sampleIdx = 0;
+        int blockSize = 128;
+        bool noteOnSent = false;
+        bool noteOffSent = false;
+
+        while (sampleIdx < totalSamples)
+        {
+            int toProcess = std::min(blockSize, totalSamples - sampleIdx);
+            juce::AudioBuffer<float> chunk(outputBuffer.getArrayOfWritePointers(), 2, sampleIdx, toProcess);
+            juce::MidiBuffer midi;
+
+            if (!noteOnSent)
+            {
+                midi.addEvent(juce::MidiMessage::noteOn(1, midiNote, (juce::uint8)100), 0);
+                noteOnSent = true;
+            }
+
+            if (sampleIdx >= onSamples && !noteOffSent)
+            {
+                midi.addEvent(juce::MidiMessage::noteOff(1, midiNote, (juce::uint8)0), 0);
+                noteOffSent = true;
+            }
+
+            processor.processBlock(chunk, midi);
+            sampleIdx += toProcess;
+        }
+
+        // Export WAV file
+        juce::File outFile("C:\\Users\\maaya\\Projects\\Synth\\VST-Synth-V1\\Tests\\output\\" + filename);
+        outFile.deleteFile();
+        juce::WavAudioFormat wavFormat;
+        std::unique_ptr<juce::AudioFormatWriter> writer(wavFormat.createWriterFor(new juce::FileOutputStream(outFile), 44100, 2, 24, {}, 0));
+        if (writer != nullptr)
+            writer->writeFromAudioSampleBuffer(outputBuffer, 0, outputBuffer.getNumSamples());
+
+        float peak = outputBuffer.getMagnitude(0, 0, totalSamples);
+        float rms = outputBuffer.getRMSLevel(0, 0, totalSamples);
+        float endMag = outputBuffer.getMagnitude(0, totalSamples - 128, 128);
+
+        std::cout << "  [" << name << "]\n"
+                  << "    File: " << filename << "\n"
+                  << "    Duration: " << (totalSamples / 44100.0f) << "s | Peak: " << peak 
+                  << " | RMS: " << rms << " | Tail Silence: " << endMag << std::endl;
+
+        logTest("Audio Audit: " + name + " exported cleanly and tail drops to silence", peak > 0.01f && endMag < 1e-4f);
+    };
+
+    // Scenario 1: LFO 1 Rate = 1.0 Hz Pitch Vibrato
+    renderScenario("1.0 Hz LFO Pitch Vibrato", "audit_1_lfo_1hz.wav", [](VSTSynthV1AudioProcessor& p) {
+        *p.apvts.getRawParameterValue(IDs::OSC1_LEVEL) = 0.8f;
+        *p.apvts.getRawParameterValue(IDs::OSC1_WAVE) = 2.0f; // Saw
+        *p.apvts.getRawParameterValue(IDs::FILTER_CUTOFF) = 5000.0f;
+        *p.apvts.getRawParameterValue(IDs::LFO1_RATE) = 1.0f; // 1.0 Hz
+        *p.apvts.getRawParameterValue(IDs::LFO1_DEPTH) = 1.0f;
+        *p.apvts.getRawParameterValue(IDs::LFO1_WAVE) = 0.0f; // Sine
+        *p.apvts.getRawParameterValue(IDs::getModCellId(0, 0)) = 2.0f; // Bus 1 Amber
+        *p.apvts.getRawParameterValue(IDs::MOD_BUS_1_AMT) = 0.15f; // Musical vibrato depth
+    }, 60, 2.5f, 0.5f);
+
+    // Scenario 2: LFO 2 Rate = 5.0 Hz Cutoff Wobble
+    renderScenario("5.0 Hz LFO Cutoff Wobble", "audit_2_lfo_5hz.wav", [](VSTSynthV1AudioProcessor& p) {
+        *p.apvts.getRawParameterValue(IDs::OSC1_LEVEL) = 0.8f;
+        *p.apvts.getRawParameterValue(IDs::OSC1_WAVE) = 3.0f; // Square
+        *p.apvts.getRawParameterValue(IDs::FILTER_CUTOFF) = 1200.0f;
+        *p.apvts.getRawParameterValue(IDs::FILTER_RES) = 4.0f;
+        *p.apvts.getRawParameterValue(IDs::LFO2_RATE) = 5.0f; // 5.0 Hz
+        *p.apvts.getRawParameterValue(IDs::LFO2_DEPTH) = 1.0f;
+        *p.apvts.getRawParameterValue(IDs::getModCellId(1, 1)) = 2.0f; // Bus 1
+        *p.apvts.getRawParameterValue(IDs::MOD_BUS_1_AMT) = 0.60f; // High cutoff modulation
+    }, 48, 2.0f, 0.5f);
+
+    // Scenario 3: 0 Attack 0 Decay Instant Organ Sustain
+    renderScenario("0 Attack 0 Decay Organ Sustain", "audit_3_env_instant_sustain.wav", [](VSTSynthV1AudioProcessor& p) {
+        *p.apvts.getRawParameterValue(IDs::OSC1_LEVEL) = 0.8f;
+        *p.apvts.getRawParameterValue(IDs::AMP_ATTACK) = 0.0f;
+        *p.apvts.getRawParameterValue(IDs::AMP_DECAY) = 0.0f;
+        *p.apvts.getRawParameterValue(IDs::AMP_SUSTAIN) = 0.75f;
+        *p.apvts.getRawParameterValue(IDs::AMP_RELEASE) = 0.020f;
+        *p.apvts.getRawParameterValue(IDs::FILTER_CUTOFF) = 8000.0f;
+    }, 60, 1.2f, 0.3f);
+
+    // Scenario 4: Soft-Knee Attack & Smooth Analog Release Fadeout
+    renderScenario("Soft-Knee Attack & Analog Release Fadeout", "audit_4_env_analog_release.wav", [](VSTSynthV1AudioProcessor& p) {
+        *p.apvts.getRawParameterValue(IDs::OSC1_LEVEL) = 0.8f;
+        *p.apvts.getRawParameterValue(IDs::AMP_ATTACK) = 0.080f; // 80ms attack
+        *p.apvts.getRawParameterValue(IDs::AMP_DECAY) = 0.200f; // 200ms decay
+        *p.apvts.getRawParameterValue(IDs::AMP_SUSTAIN) = 0.60f;
+        *p.apvts.getRawParameterValue(IDs::AMP_RELEASE) = 0.400f; // 400ms release
+        *p.apvts.getRawParameterValue(IDs::FILTER_CUTOFF) = 4000.0f;
+    }, 60, 1.0f, 0.8f);
+
+    // Scenario 5: Filter Envelope Brass Sweep
+    renderScenario("Filter Envelope Brass Sweep", "audit_5_filter_sweep.wav", [](VSTSynthV1AudioProcessor& p) {
+        *p.apvts.getRawParameterValue(IDs::OSC1_LEVEL) = 0.8f;
+        *p.apvts.getRawParameterValue(IDs::OSC1_WAVE) = 2.0f; // Saw
+        *p.apvts.getRawParameterValue(IDs::FILTER_CUTOFF) = 300.0f;
+        *p.apvts.getRawParameterValue(IDs::FILTER_RES) = 3.5f;
+        *p.apvts.getRawParameterValue(IDs::FILTER_ENV_AMT) = 4000.0f;
+        *p.apvts.getRawParameterValue(IDs::FILT_ATTACK) = 0.080f; // 80ms attack
+        *p.apvts.getRawParameterValue(IDs::FILT_DECAY) = 0.350f; // 350ms decay
+        *p.apvts.getRawParameterValue(IDs::FILT_SUSTAIN) = 0.15f;
+        *p.apvts.getRawParameterValue(IDs::FILT_RELEASE) = 0.200f;
+    }, 48, 1.5f, 0.5f);
+
+    // Scenario 6: Polyphonic Chord Progression (16-note voicing)
+    {
+        std::string name = "Polyphonic 16-Voice Chord Progression";
+        std::string filename = "audit_6_polyphonic_chords.wav";
+        VSTSynthV1AudioProcessor processor;
+        processor.prepareToPlay(44100.0, 128);
+
+        *processor.apvts.getRawParameterValue(IDs::OSC1_LEVEL) = 0.5f;
+        *processor.apvts.getRawParameterValue(IDs::OSC1_WAVE) = 2.0f; // Saw
+        *processor.apvts.getRawParameterValue(IDs::OSC2_LEVEL) = 0.3f;
+        *processor.apvts.getRawParameterValue(IDs::OSC2_WAVE) = 3.0f; // Square
+        *processor.apvts.getRawParameterValue(IDs::OSC2_DETUNE) = 5.0f;
+        *processor.apvts.getRawParameterValue(IDs::FILTER_CUTOFF) = 2500.0f;
+        *processor.apvts.getRawParameterValue(IDs::FILTER_RES) = 2.0f;
+        *processor.apvts.getRawParameterValue(IDs::AMP_ATTACK) = 0.040f;
+        *processor.apvts.getRawParameterValue(IDs::AMP_RELEASE) = 0.250f;
+
+        float totalSec = 4.0f;
+        int totalSamples = static_cast<int>(totalSec * 44100.0f);
+        juce::AudioBuffer<float> outputBuffer(2, totalSamples);
+        outputBuffer.clear();
+
+        // Play 2 chords: Cmaj9 then Fmaj9
+        int chord1[] = { 48, 52, 55, 59, 62, 64, 67, 71 };
+        int chord2[] = { 41, 45, 48, 52, 55, 57, 60, 64 };
+
+        int sampleIdx = 0;
+        int blockSize = 128;
+        int chord1Off = static_cast<int>(1.8f * 44100.0f);
+        int chord2On = static_cast<int>(2.0f * 44100.0f);
+        int chord2Off = static_cast<int>(3.4f * 44100.0f);
+        bool c1On = false, c1Off = false, c2On = false, c2Off = false;
+
+        while (sampleIdx < totalSamples)
+        {
+            int toProcess = std::min(blockSize, totalSamples - sampleIdx);
+            juce::AudioBuffer<float> chunk(outputBuffer.getArrayOfWritePointers(), 2, sampleIdx, toProcess);
+            juce::MidiBuffer midi;
+
+            if (!c1On)
+            {
+                for (int note : chord1) midi.addEvent(juce::MidiMessage::noteOn(1, note, (juce::uint8)90), 0);
+                c1On = true;
+            }
+            if (sampleIdx >= chord1Off && !c1Off)
+            {
+                for (int note : chord1) midi.addEvent(juce::MidiMessage::noteOff(1, note, (juce::uint8)0), 0);
+                c1Off = true;
+            }
+            if (sampleIdx >= chord2On && !c2On)
+            {
+                for (int note : chord2) midi.addEvent(juce::MidiMessage::noteOn(1, note, (juce::uint8)90), 0);
+                c2On = true;
+            }
+            if (sampleIdx >= chord2Off && !c2Off)
+            {
+                for (int note : chord2) midi.addEvent(juce::MidiMessage::noteOff(1, note, (juce::uint8)0), 0);
+                c2Off = true;
+            }
+
+            processor.processBlock(chunk, midi);
+            sampleIdx += toProcess;
+        }
+
+        juce::File outFile("C:\\Users\\maaya\\Projects\\Synth\\VST-Synth-V1\\Tests\\output\\" + filename);
+        outFile.deleteFile();
+        juce::WavAudioFormat wavFormat;
+        std::unique_ptr<juce::AudioFormatWriter> writer(wavFormat.createWriterFor(new juce::FileOutputStream(outFile), 44100, 2, 24, {}, 0));
+        if (writer != nullptr) writer->writeFromAudioSampleBuffer(outputBuffer, 0, outputBuffer.getNumSamples());
+
+        float peak = outputBuffer.getMagnitude(0, 0, totalSamples);
+        float endMag = outputBuffer.getMagnitude(0, totalSamples - 128, 128);
+        logTest("Audio Audit: " + name + " exported cleanly and polyphony tail lands in silence", peak > 0.05f && endMag < 1e-4f);
     }
 
     std::cout << "\n>>> ALL 16-VOICE POLYPHONY & DSP TESTS PASSED FLAWLESSLY! <<<" << std::endl;

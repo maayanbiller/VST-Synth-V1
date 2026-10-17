@@ -41,52 +41,101 @@ public:
     SynthEngine synth;
 
 private:
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    std::vector<SynthVoice*> cachedVoicePointers;
 
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     
     // Arrays for fast APVTS lookup
     
 
-// Cached Parameters
-    std::atomic<float>* noiseLevel = nullptr; std::atomic<float>* noiseColor = nullptr;
-    std::atomic<float>* playMode = nullptr; std::atomic<float>* glideTime = nullptr;
-    std::atomic<float>* modAmt1 = nullptr; std::atomic<float>* modAmt2 = nullptr; std::atomic<float>* modAmt3 = nullptr; std::atomic<float>* modAmt4 = nullptr;
+    // Cached Parameter Pointers (Initialized once in constructor, zero audio-thread allocation/locking)
+    struct CachedParameters
+    {
+        std::atomic<float>* masterVol = nullptr;
+        std::atomic<float>* noiseLevel = nullptr;
+        std::atomic<float>* noiseColor = nullptr;
+        std::atomic<float>* playMode = nullptr;
+        std::atomic<float>* glideTime = nullptr;
 
-    std::atomic<float>* modSrc1 = nullptr; std::atomic<float>* modDst1 = nullptr;
-    std::atomic<float>* modSrc2 = nullptr; std::atomic<float>* modDst2 = nullptr;
-    std::atomic<float>* modSrc3 = nullptr; std::atomic<float>* modDst3 = nullptr;
-    std::atomic<float>* modSrc4 = nullptr; std::atomic<float>* modDst4 = nullptr;
+        std::atomic<float>* oscWave[4] = { nullptr };
+        std::atomic<float>* oscOct[4] = { nullptr };
+        std::atomic<float>* oscDetune[4] = { nullptr };
+        std::atomic<float>* oscLevel[4] = { nullptr };
+        std::atomic<float>* oscPwm[4] = { nullptr };
+        std::atomic<float>* oscVoices[4] = { nullptr };
+        std::atomic<float>* oscWidth[4] = { nullptr };
 
-    std::atomic<float>* masterVol = nullptr;
-     
-      
+        std::atomic<float>* filterType = nullptr;
+        std::atomic<float>* filterCutoff = nullptr;
+        std::atomic<float>* filterRes = nullptr;
+        std::atomic<float>* filterDrive = nullptr;
+        std::atomic<float>* filterEnvAmt = nullptr;
+        std::atomic<float>* filterKeyTrack = nullptr;
 
-    std::atomic<float>* osc1Wave = nullptr; std::atomic<float>* osc1Oct = nullptr; std::atomic<float>* osc1Detune = nullptr; std::atomic<float>* osc1Level = nullptr; std::atomic<float>* osc1Pwm = nullptr;
-    std::atomic<float>* osc2Wave = nullptr; std::atomic<float>* osc2Oct = nullptr; std::atomic<float>* osc2Detune = nullptr; std::atomic<float>* osc2Level = nullptr; std::atomic<float>* osc2Pwm = nullptr;
-    std::atomic<float>* osc3Wave = nullptr; std::atomic<float>* osc3Oct = nullptr; std::atomic<float>* osc3Detune = nullptr; std::atomic<float>* osc3Level = nullptr; std::atomic<float>* osc3Pwm = nullptr;
-    std::atomic<float>* osc4Wave = nullptr; std::atomic<float>* osc4Oct = nullptr; std::atomic<float>* osc4Detune = nullptr; std::atomic<float>* osc4Level = nullptr; std::atomic<float>* osc4Pwm = nullptr;
+        std::atomic<float>* ampAttack = nullptr;
+        std::atomic<float>* ampDecay = nullptr;
+        std::atomic<float>* ampSustain = nullptr;
+        std::atomic<float>* ampRelease = nullptr;
 
-    std::atomic<float>* filterType = nullptr; std::atomic<float>* filterCutoff = nullptr; std::atomic<float>* filterRes = nullptr; std::atomic<float>* filterDrive = nullptr; std::atomic<float>* filterEnvAmt = nullptr; std::atomic<float>* filterKeyTrack = nullptr;
-    
-    std::atomic<float>* ampAttack = nullptr; std::atomic<float>* ampDecay = nullptr; std::atomic<float>* ampSustain = nullptr; std::atomic<float>* ampRelease = nullptr;
-    std::atomic<float>* filtAttack = nullptr; std::atomic<float>* filtDecay = nullptr; std::atomic<float>* filtSustain = nullptr; std::atomic<float>* filtRelease = nullptr;
-    std::atomic<float>* modAttack = nullptr; std::atomic<float>* modDecay = nullptr; std::atomic<float>* modSustain = nullptr; std::atomic<float>* modRelease = nullptr;
-    
-    std::atomic<float>* lfo1Wave = nullptr; std::atomic<float>* lfo1Rate = nullptr; std::atomic<float>* lfo1Depth = nullptr;
-    std::atomic<float>* lfo2Wave = nullptr; std::atomic<float>* lfo2Rate = nullptr; std::atomic<float>* lfo2Depth = nullptr;
+        std::atomic<float>* filtAttack = nullptr;
+        std::atomic<float>* filtDecay = nullptr;
+        std::atomic<float>* filtSustain = nullptr;
+        std::atomic<float>* filtRelease = nullptr;
 
-       
-    
+        std::atomic<float>* modAttack = nullptr;
+        std::atomic<float>* modDecay = nullptr;
+        std::atomic<float>* modSustain = nullptr;
+        std::atomic<float>* modRelease = nullptr;
+
+        std::atomic<float>* lfoWave[2] = { nullptr };
+        std::atomic<float>* lfoRate[2] = { nullptr };
+        std::atomic<float>* lfoDepth[2] = { nullptr };
+
+        std::atomic<float>* modBusAmts[4] = { nullptr };
+        std::atomic<float>* modMatrix[5][8] = { { nullptr } };
+
+        std::atomic<float>* modSrc[4] = { nullptr };
+        std::atomic<float>* modDst[4] = { nullptr };
+        std::atomic<float>* modAmts[4] = { nullptr };
+    } cachedParams;
+
+    struct DCBlocker
+    {
+        float x1 = 0.0f;
+        float y1 = 0.0f;
+        float R = 0.9993f;
+
+        void prepare(double sampleRate)
+        {
+            R = 1.0f - (2.0f * juce::MathConstants<float>::pi * 5.0f / static_cast<float>(sampleRate));
+            reset();
+        }
+
+        void reset()
+        {
+            x1 = 0.0f;
+            y1 = 0.0f;
+        }
+
+        float processSample(float x)
+        {
+            float y = x - x1 + R * y1;
+            x1 = x;
+            if (std::abs(y) < 1e-8f || !std::isfinite(y))
+            {
+                y = 0.0f;
+                y1 = 0.0f;
+                x1 = 0.0f;
+            }
+            else
+            {
+                y1 = y;
+            }
+            return y;
+        }
+    };
+
+    DCBlocker dcBlockerL, dcBlockerR;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VSTSynthV1AudioProcessor)
 };

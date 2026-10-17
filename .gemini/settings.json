@@ -1,0 +1,34 @@
+{
+  "agents": {
+    "flash": {
+      "path": ".gemini/agents/flash.md",
+      "enabled": true,
+      "model": "gemini-flash-3.8",
+      "temperature": 0.2
+    },
+    "overrides": {
+      "flash": {
+        "path": ".gemini/agents/flash.md",
+        "enabled": true,
+        "model": "gemini-flash-3.8",
+        "temperature": 0.2
+      }
+    }
+  },
+  "modelConfigs": {
+    "overrides": [
+      {
+        "match": {
+          "overrideScope": "flash"
+        },
+        "modelConfig": {
+          "model": "gemini-flash-3.8",
+          "temperature": 0.2,
+          "generateContentConfig": {
+            "temperature": 0.2
+          }
+        }
+      }
+    ]
+  }
+}

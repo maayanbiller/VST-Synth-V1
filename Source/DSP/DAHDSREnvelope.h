@@ -42,12 +42,19 @@ private:
     double sampleRate = 44100.0;
     
     float currentValue = 0.0f;
-    int samplesInCurrentState = 0;
-    int stateLengthSamples = 0;
-    float targetValue = 0.0f;
-    float coef = 0.0f;
-    float releaseMultiplier = 0.0f;
+    float startValue = 0.0f;
+    float phase = 0.0f;
+    float phaseInc = 0.0f;
 
-    void advanceToNextState();
-    void enterState(State newState, bool resetSamples = true);
+    float decayExpVal = 1.0f;
+    float decayExpMult = 1.0f;
+    float releaseExpVal = 1.0f;
+    float releaseExpMult = 1.0f;
+
+    int delayCount = 0;
+    int holdCount = 0;
+
+    void enterAttack();
+    void enterDecay();
+    void enterRelease();
 };
